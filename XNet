@@ -1,0 +1,4953 @@
+#ifndef __H_XNET_H__
+#define __H_XNET_H__
+
+#pragma once
+
+/*#ifdef _WIN32 
+//定义_WIN32_WINNT 0x0501时，需要使用兼容XP设置
+//#define _WIN32_WINNT 0x0501 
+#define _WIN32_WINNT 0x0601 
+#endif // _WIN32*/
+
+#pragma warning(disable: 4251)
+
+#include <set>
+#include <deque>
+#include <queue>
+#include <vector>
+#include <string>
+#include <cstddef>
+#include <memory>
+#include <utility>
+#include <type_traits>
+#include <boost/assert.hpp>
+#include <boost/config.hpp>
+#include <boost/bind.hpp>
+#include <boost/thread.hpp>
+#include <boost/thread/shared_mutex.hpp>
+#include <boost/atomic.hpp>
+#include <boost/shared_ptr.hpp>
+#include <boost/enable_shared_from_this.hpp>
+#include <boost/noncopyable.hpp>
+#include <boost/array.hpp>
+#include <boost/function.hpp>
+#include <boost/date_time.hpp>
+#include <boost/any.hpp>
+#include <boost/logic/tribool.hpp>
+#include <boost/circular_buffer.hpp>
+#include <boost/unordered_set.hpp>
+#include <boost/unordered_map.hpp>
+#include <boost/version.hpp>
+
+#include <boost/log/core.hpp>
+#include <boost/log/trivial.hpp>
+#include <boost/log/utility/setup/file.hpp>
+#include <boost/log/utility/setup/common_attributes.hpp>
+#include <boost/log/sources/severity_logger.hpp>
+
+#include <boost/asio.hpp>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/coroutine.hpp>
+#include <boost/asio/ssl/error.hpp>
+#include <boost/asio/ssl/stream.hpp>
+
+#ifndef _WIN32
+#define nullptr 0
+#endif
+
+#include "XExport.h"
+
+#define XSERVER_PROTOTYPE_BEAST (XSERVER_PROTOTYPE==XSERVER_ALL || XSERVER_PROTOTYPE==XSERVER_HTTP || XSERVER_PROTOTYPE==XSERVER_HTTPS || XSERVER_PROTOTYPE==XSERVER_WEBSOCKET || XSERVER_PROTOTYPE==XSERVER_SSL_WEBSOCKET)
+
+#define PEER_TYPE_MASK			0xff
+#define PEER_TYPE_BITS			8
+#define PEER_ID_BITS 			(sizeof(size_t) * 8 - PEER_TYPE_BITS)
+#define PEER_ID_MASK 			((size_t)~(PEER_TYPE_MASK << PEER_ID_BITS))
+#define PEER_TYPE(id) 			((size_t)(((size_t)(id) ^ PEER_ID_MASK) >> PEER_ID_BITS))
+#define PEER_ID(id)				((size_t)((size_t)(id) & PEER_ID_MASK))
+#define MAKE_PEER_ID(type,id) 	((size_t)(((size_t)(type) << PEER_ID_BITS) | PEER_ID(id)))
+
+//namespace XNet 
+//{
+
+inline void fail(boost::system::error_code ec, char const* what)
+{
+	std::cerr << what << ": " << ec.message() << "\n";
+}
+
+template<typename Target>
+Target strto(const std::string& arg, const Target& def = Target())
+{
+	if (!arg.empty()) {
+		try
+		{
+			Target o;
+			std::stringstream ss;
+			ss << arg;
+			ss >> o;
+			return o;
+		}
+		catch (std::exception& e)
+		{
+
+		}
+		catch (...)
+		{
+
+		}
+	}
+	return def;
+}
+
+template<typename Target>
+Target wcsto(const std::wstring& arg, const Target& def = Target())
+{
+	if (!arg.empty()) {
+		try
+		{
+			Target o;
+			std::wstringstream ss;
+			ss << arg;
+			ss >> o;
+			return o;
+		}
+		catch (std::exception& e)
+		{
+
+		}
+		catch (...)
+		{
+
+		}
+	}
+	return def;
+}
+
+template<typename Source>
+std::string tostr(const Source& arg)
+{
+	std::ostringstream ss;
+	ss << arg;
+	return ss.str();
+}
+
+template<typename Source>
+std::wstring towcs(const Source& arg)
+{
+	std::wostringstream ss;
+	ss << arg;
+	return ss.str();
+}
+
+template<typename Source>
+std::string tostrex(const Source& arg, int p = -1, int w = -1, char c = '0')
+{
+	std::ostringstream ss;
+	if (p >= 0) {
+		ss.setf(std::ios::fixed);
+		ss.precision(p);
+	}
+	if (w >= 0) {
+		ss.width(w);
+		ss.fill(c);
+	}
+	ss << arg;
+	return ss.str();
+}
+
+template<typename Source>
+std::wstring towcsex(const Source& arg, int p = -1, int w = -1, wchar_t c = '0')
+{
+	std::wostringstream ss;
+	if (p >= 0) {
+		ss.setf(std::ios::fixed);
+		ss.precision(p);
+	}
+	if (w >= 0) {
+		ss.width(w);
+		ss.fill(c);
+	}
+	ss << arg;
+	return ss.str();
+}
+
+#ifdef UNICODE
+#define tcsto wcsto
+#define ttocs towcs
+#define ttocsex towcsex
+#else
+#define tcsto strto
+#define ttocs tostr
+#define ttocsex tostrex
+#endif//
+
+#ifdef WIN32
+#ifndef vsnprintf
+#define vsnprintf	vsprintf_s
+#endif
+#endif
+
+class XLogger : private boost::noncopyable
+{
+  public:
+	static XLogger &instance()
+	{
+		static XLogger slogger;
+		return slogger;
+	}
+
+	static void init(
+		const std::string &filename,
+		boost::log::trivial::severity_level lv = boost::log::trivial::debug,
+		int maxsize = 100 * 1000 * 1000)
+	{
+		boost::log::register_simple_formatter_factory<boost::log::trivial::severity_level, char>("Severity");
+
+		boost::log::add_file_log(
+			filename + "_%Y-%m-%d-%N.log",
+			boost::log::keywords::auto_flush = true,
+			boost::log::keywords::open_mode = std::ios::app,
+			boost::log::keywords::rotation_size = maxsize,
+			boost::log::keywords::time_based_rotation = boost::log::sinks::file::rotation_at_time_point(0, 0, 0),
+			boost::log::keywords::format = "%TimeStamp% %Severity% : %Message%");
+
+		boost::log::core::get()->set_filter(boost::log::trivial::severity >= lv);
+		boost::log::add_common_attributes();
+	}
+
+	void write(boost::log::trivial::severity_level lv, const char *fmt, ...)
+	{
+		char buffer[2048] = {0};
+		va_list args;
+		va_start(args, fmt);
+		vsnprintf(buffer, sizeof(buffer) - 1, fmt, args);
+		BOOST_LOG_SEV(logger_, lv) << buffer;
+		va_end(args);
+	}
+
+	void write_direct(boost::log::trivial::severity_level lv, const char *str)
+	{
+		BOOST_LOG_SEV(logger_, lv) << str;
+	}
+
+  private:
+	boost::log::sources::severity_logger<boost::log::trivial::severity_level> logger_;
+};
+
+#define LOG4D(format, ...) \
+	XLogger::instance().write(boost::log::trivial::debug, format, ##__VA_ARGS__)
+#define LOG4I(format, ...) \
+	XLogger::instance().write(boost::log::trivial::info, format, ##__VA_ARGS__)
+#define LOG4W(format, ...) \
+	XLogger::instance().write(boost::log::trivial::warning, format, ##__VA_ARGS__)
+#define LOG4E(format, ...) \
+	XLogger::instance().write(boost::log::trivial::error, format, ##__VA_ARGS__)
+//#define LOG4F(format, ...) \
+//	XLogger::instance().write(boost::log::trivial::fatal, format, ## __VA_ARGS__)
+
+/// x initial reserve (size) bytes read write buffer class
+///
+/// @code
+/// +-------------------+------------------+------------------+
+/// |  available bytes  |  readable bytes  |  writable bytes  |
+/// |    available1     |     (CONTENT)    |    available2    |
+/// +-------------------+------------------+------------------+
+/// |                   |                  |                  |
+/// 0      <=      readerIndex   <=   writerIndex    <=     size
+///
+class XRWBuffer : private boost::noncopyable
+{
+  public:
+	explicit XRWBuffer(size_t size = 1024)
+		: buffer_(), readerIndex_(0), writerIndex_(0)
+	{
+		buffer_.reserve(size);
+		BOOST_ASSERT(readable() == 0);
+		BOOST_ASSERT(writable() == 0);
+	}
+
+	void swap(XRWBuffer &rhs)
+	{
+		buffer_.swap(rhs.buffer_);
+		std::swap(readerIndex_, rhs.readerIndex_);
+		std::swap(writerIndex_, rhs.writerIndex_);
+	}
+
+	void clear()
+	{
+		readerIndex_ = 0;
+		writerIndex_ = 0;
+	}
+
+	size_t size() const
+	{
+		return writerIndex_ - readerIndex_;
+	}
+
+	size_t readable() const
+	{
+		return writerIndex_ - readerIndex_;
+	}
+
+	size_t writable() const
+	{
+		return buffer_.size() - writerIndex_;
+	}
+
+	size_t prependable() const
+	{
+		return readerIndex_;
+	}
+
+	size_t available() const
+	{
+		BOOST_ASSERT(writerIndex_ >= readerIndex_);
+		return buffer_.size() - (writerIndex_ - readerIndex_);
+	}
+
+	size_t capacity() const
+	{
+		return buffer_.capacity();
+	}
+
+	const char *data() const
+	{
+		return begin() + readerIndex_;
+	}
+
+	const char *reader() const
+	{
+		return begin() + readerIndex_;
+	}
+
+	char *writer()
+	{
+		return begin() + writerIndex_;
+	}
+
+	const char *writer() const
+	{
+		return begin() + writerIndex_;
+	}
+
+	void retrieve(size_t len)
+	{
+		BOOST_ASSERT(len <= readable());
+		if (len < readable())
+		{
+			readerIndex_ += len;
+		}
+		else
+		{
+			clear();
+		}
+	}
+
+	void retrieveInt64()
+	{
+		retrieve(sizeof(int64_t));
+	}
+
+	void retrieveInt32()
+	{
+		retrieve(sizeof(int32_t));
+	}
+
+	void retrieveInt16()
+	{
+		retrieve(sizeof(int16_t));
+	}
+
+	void retrieveInt8()
+	{
+		retrieve(sizeof(int8_t));
+	}
+
+	void ensureWritable(size_t len)
+	{
+		if (writable() < len)
+		{
+			ensureWritableBytes(len);
+		}
+		BOOST_ASSERT(writable() >= len);
+	}
+
+	void write(size_t len)
+	{
+		BOOST_ASSERT(len <= writable());
+		writerIndex_ += len;
+	}
+
+	void unwrite(size_t len)
+	{
+		BOOST_ASSERT(len <= readable());
+		writerIndex_ -= len;
+	}
+
+	void append(const char *buf, size_t len)
+	{
+		ensureWritable(len);
+		std::copy(buf, buf + len, writer());
+		write(len);
+	}
+
+	void append(const void *buf, size_t len)
+	{
+		append(static_cast<const char *>(buf), len);
+	}
+	template <class Y>
+	Y &append(const Y &rhs)
+	{
+		append(&rhs, sizeof(Y));
+	}
+
+	void appendVarint(int64_t x)
+	{
+		if (x < (int8_t)0xfd)
+		{
+			appendInt8((int8_t)x);
+		}
+		else if (x < (int16_t)0xffff)
+		{
+			appendInt8((int8_t)0xfd);
+			appendInt16((int16_t)x);
+		}
+		else if (x < (int32_t)0xffffffffu)
+		{
+			appendInt8((int8_t)0xfe);
+			appendInt32((int32_t)x);
+		}
+		else
+		{
+			appendInt8((int8_t)0xff);
+			appendInt64((int64_t)x);
+		}
+	}
+
+	void appendInt64(int64_t x)
+	{
+		append(&x, sizeof(int64_t));
+	}
+
+	void appendInt32(int32_t x)
+	{
+		append(&x, sizeof(int32_t));
+	}
+
+	void appendInt16(int16_t x)
+	{
+		append(&x, sizeof(int16_t));
+	}
+
+	void appendInt8(int8_t x)
+	{
+		append(&x, sizeof(x));
+	}
+
+	char *read(char *buf, size_t len)
+	{
+		peek(buf, len);
+		retrieve(len);
+		return buf;
+	}
+
+	template <class Y>
+	Y &read(Y &rhs)
+	{
+		read(&rhs, sizeof(Y));
+		return rhs;
+	}
+
+	int64_t readVarint()
+	{
+		int64_t result = 0;
+		int8_t space = 0;
+		int8_t mark = peekInt8();
+		if (mark < (int8_t)0xfd)
+		{
+			result = mark;
+			retrieveInt8();
+			return result;
+		}
+		else if (mark == (int8_t)0xfd)
+		{
+			retrieveInt8();
+			result = peekInt16();
+			retrieveInt16();
+			return result;
+		}
+		else if (mark == (int8_t)0xfe)
+		{
+			retrieveInt8();
+			result = peekInt32();
+			retrieveInt32();
+			return result;
+		}
+		else
+		{
+			retrieveInt8();
+			result = peekInt64();
+			retrieveInt64();
+			return result;
+		}
+	}
+
+	int64_t readInt64()
+	{
+		int64_t result = peekInt64();
+		retrieveInt64();
+		return result;
+	}
+
+	int32_t readInt32()
+	{
+		int32_t result = peekInt32();
+		retrieveInt32();
+		return result;
+	}
+
+	int16_t readInt16()
+	{
+		int16_t result = peekInt16();
+		retrieveInt16();
+		return result;
+	}
+
+	int8_t readInt8()
+	{
+		int8_t result = peekInt8();
+		retrieveInt8();
+		return result;
+	}
+
+	char *peek(char *buf, size_t len)
+	{
+		BOOST_ASSERT(readable() >= len);
+		::memcpy(buf, reader(), len);
+		return buf;
+	}
+	template <class Y>
+	Y &peek(Y &rhs)
+	{
+		peek(&rhs, sizeof(Y));
+		return rhs;
+	}
+
+	int64_t peekInt64() const
+	{
+		BOOST_ASSERT(readable() >= sizeof(int64_t));
+		int64_t x = 0;
+		::memcpy(&x, reader(), sizeof(int64_t));
+		return x;
+	}
+
+	int32_t peekInt32() const
+	{
+		BOOST_ASSERT(readable() >= sizeof(int32_t));
+		int32_t x = 0;
+		::memcpy(&x, reader(), sizeof(int32_t));
+		return x;
+	}
+
+	int16_t peekInt16() const
+	{
+		BOOST_ASSERT(readable() >= sizeof(int16_t));
+		int16_t x = 0;
+		::memcpy(&x, reader(), sizeof(int16_t));
+		return x;
+	}
+
+	int8_t peekInt8() const
+	{
+		BOOST_ASSERT(readable() >= sizeof(int8_t));
+		int8_t x = *reader();
+		return x;
+	}
+
+	void prepend(const char *buf, size_t len)
+	{
+		BOOST_ASSERT(len <= prependable());
+		readerIndex_ -= len;
+		std::copy(buf, buf + len, begin() + readerIndex_);
+	}
+
+	void prepend(const void *buf, size_t len)
+	{
+		prepend(static_cast<const char *>(buf), len);
+	}
+	template <class Y>
+	Y &prepend(const Y &rhs)
+	{
+		prepend(&rhs, sizeof(Y));
+	}
+
+	void prependVarint(int64_t x)
+	{
+		if (x < (int8_t)0xfd)
+		{
+			prependInt8((int8_t)x);
+		}
+		else if (x < 0xffff)
+		{
+			prependInt8((int8_t)0xfd);
+			prependInt16((int16_t)x);
+		}
+		else if (x < 0xffffffffu)
+		{
+			prependInt8((int8_t)0xfe);
+			prependInt32((int32_t)x);
+		}
+		else
+		{
+			prependInt8((int8_t)0xff);
+			prependInt64((int64_t)x);
+		}
+	}
+
+	void prependInt64(int64_t x)
+	{
+		prepend(&x, sizeof(int64_t));
+	}
+
+	void prependInt32(int32_t x)
+	{
+		prepend(&x, sizeof(int32_t));
+	}
+
+	void prependInt16(int16_t x)
+	{
+		prepend(&x, sizeof(int16_t));
+	}
+
+	void prependInt8(int8_t x)
+	{
+		prepend(&x, sizeof(x));
+	}
+
+	void shrink()
+	{
+		buffer_.shrink_to_fit();
+	}
+
+  protected:
+	char *begin()
+	{
+		return &*buffer_.begin();
+	}
+
+	const char *begin() const
+	{
+		return &*buffer_.begin();
+	}
+
+	void ensureWritableBytes(size_t len)
+	{
+		if (available() < len)
+		{
+			// FIXME: move readable data
+			buffer_.resize(writerIndex_ + len);
+		}
+		else
+		{
+			// move readable data to the front, make space inside buffer
+			BOOST_ASSERT(0 < readerIndex_);
+			size_t readableSize = readable();
+			std::copy(begin() + readerIndex_, begin() + writerIndex_, begin());
+			readerIndex_ = 0;
+			writerIndex_ = readerIndex_ + readableSize;
+			BOOST_ASSERT(readableSize == readable());
+		}
+	}
+
+  protected:
+	std::string buffer_;
+	size_t readerIndex_;
+	size_t writerIndex_;
+};
+
+
+template<class Server>
+class XPeer
+{
+public:
+  XPeer(Server &srv, size_t id)
+	  : server_(srv), id_(id)
+  {
+  }
+
+  ~XPeer()
+  {
+  }
+
+  inline Server &server() { return server_; }
+
+  inline size_t id() { return id_; }
+
+  inline const boost::any &set_context(boost::any context)
+  {
+	  context_ = context;
+  }
+
+  inline const boost::any &context()
+  {
+	  return context_;
+  }
+
+  inline void on_fail(boost::system::error_code ec, char const *what)
+  {
+	  fail(ec, what);
+  }
+
+protected:
+	Server& server_;
+	size_t id_;
+	boost::any context_;
+};
+
+template<class Server, class Derived>
+class XResolver
+{
+public:
+	XResolver(boost::asio::io_context& io_context)
+		: resolver_(io_context)
+		//, query_(boost::asio::ip::tcp::v4(), addr, port)
+	{
+		
+	}
+
+	inline Derived&
+		derived()
+	{
+		return static_cast<Derived&>(*this);
+	}
+
+	inline std::string& addr() {
+		return addr_;
+	}
+
+	inline std::string& port() {
+		return port_;
+	}
+
+protected:
+	void do_resolve(const std::string& addr, const std::string& port)
+	{
+		//resolver_.async_resolve(query_, boost::bind(&XResolver::on_resolve,
+		//	derived().shared_from_this(),
+		//	boost::asio::placeholders::error, _2));
+		
+		addr_ = addr;
+		port_ = port;
+
+		// Look up the domain name
+		resolver_.async_resolve(
+			addr_,
+			port_,
+			std::bind(
+				&Derived::on_resolve,
+				derived().shared_from_this(),
+				std::placeholders::_1,
+				std::placeholders::_2));
+	}
+
+	void on_resolve(const boost::system::error_code& ec
+		, boost::asio::ip::tcp::resolver::results_type results)
+	{
+		if (ec) {
+			derived().on_fail(ec, "resolve");
+			return;
+		}
+
+		derived().do_connect(results);
+	}
+protected:
+	std::string addr_;
+	std::string port_;
+	boost::asio::ip::tcp::resolver resolver_;
+	//boost::asio::ip::tcp::resolver::query query_;
+};
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
+
+//[example_core_detect_ssl_1
+
+#include <boost/beast/core.hpp>
+#include <boost/asio/coroutine.hpp>
+#include <boost/logic/tribool.hpp>
+
+/** Return `true` if a buffer contains a TLS/SSL client handshake.
+
+    This function returns `true` if the beginning of the buffer
+    indicates that a TLS handshake is being negotiated, and that
+    there are at least four octets in the buffer.
+
+    If the content of the buffer cannot possibly be a TLS handshake
+    request, the function returns `false`. Otherwise, if additional
+    octets are required, `boost::indeterminate` is returned.
+
+    @param buffer The input buffer to inspect. This type must meet
+    the requirements of @b ConstBufferSequence.
+
+    @return `boost::tribool` indicating whether the buffer contains
+    a TLS client handshake, does not contain a handshake, or needs
+    additional octets.
+
+    @see
+
+    http://www.ietf.org/rfc/rfc2246.txt
+    7.4. Handshake protocol
+*/
+template<class ConstBufferSequence>
+boost::tribool
+is_ssl_handshake(ConstBufferSequence const& buffers);
+
+//]
+
+//[example_core_detect_ssl_2
+
+template<
+    class ConstBufferSequence>
+boost::tribool
+is_ssl_handshake(
+    ConstBufferSequence const& buffers)
+{
+    // Make sure buffers meets the requirements
+    static_assert(
+        boost::asio::is_const_buffer_sequence<ConstBufferSequence>::value,
+        "ConstBufferSequence requirements not met");
+
+    // We need at least one byte to really do anything
+    if(boost::asio::buffer_size(buffers) < 1)
+        return boost::indeterminate;
+
+    // Extract the first byte, which holds the
+    // "message" type for the Handshake protocol.
+    unsigned char v;
+    boost::asio::buffer_copy(boost::asio::buffer(&v, 1), buffers);
+
+    // Check that the message type is "SSL Handshake" (rfc2246)
+    if(v != 0x16)
+    {
+        // This is definitely not a handshake
+        return false;
+    }
+
+    // At least four bytes are needed for the handshake
+    // so make sure that we get them before returning `true`
+    if(boost::asio::buffer_size(buffers) < 4)
+        return boost::indeterminate;
+
+    // This can only be a TLS/SSL handshake
+    return true;
+}
+
+//]
+
+//[example_core_detect_ssl_3
+
+/** Detect a TLS/SSL handshake on a stream.
+
+    This function reads from a stream to determine if a TLS/SSL
+    handshake is being received. The function call will block
+    until one of the following conditions is true:
+
+    @li The disposition of the handshake is determined
+
+    @li An error occurs
+
+    Octets read from the stream will be stored in the passed dynamic
+    buffer, which may be used to perform the TLS handshake if the
+    detector returns true, or otherwise consumed by the caller based
+    on the expected protocol.
+
+    @param stream The stream to read from. This type must meet the
+    requirements of @b SyncReadStream.
+
+    @param buffer The dynamic buffer to use. This type must meet the
+    requirements of @b DynamicBuffer.
+
+    @param ec Set to the error if any occurred.
+
+    @return `boost::tribool` indicating whether the buffer contains
+    a TLS client handshake, does not contain a handshake, or needs
+    additional octets. If an error occurs, the return value is
+    undefined.
+*/
+template<
+    class SyncReadStream,
+    class DynamicBuffer>
+boost::tribool
+detect_ssl(
+    SyncReadStream& stream,
+    DynamicBuffer& buffer,
+    boost::beast::error_code& ec)
+{
+    namespace beast = boost::beast;
+
+    // Make sure arguments meet the requirements
+    static_assert(beast::is_sync_read_stream<SyncReadStream>::value,
+        "SyncReadStream requirements not met");
+    static_assert(
+        boost::asio::is_dynamic_buffer<DynamicBuffer>::value,
+        "DynamicBuffer requirements not met");
+
+    // Loop until an error occurs or we get a definitive answer
+    for(;;)
+    {
+        // There could already be data in the buffer
+        // so we do this first, before reading from the stream.
+        auto const result = is_ssl_handshake(buffer.data());
+
+        // If we got an answer, return it
+        if(! boost::indeterminate(result))
+        {
+            // This is a fast way to indicate success
+            // without retrieving the default category.
+            ec.assign(0, ec.category());
+            return result;
+        }
+
+        // The algorithm should never need more than 4 bytes
+        BOOST_ASSERT(buffer.size() < 4);
+
+        // Prepare the buffer's output area.
+        auto const mutable_buffer = buffer.prepare(beast::read_size(buffer, 1536));
+
+        // Try to fill our buffer by reading from the stream
+        std::size_t const bytes_transferred = stream.read_some(mutable_buffer, ec);
+
+        // Check for an error
+        if(ec)
+            break;
+
+        // Commit what we read into the buffer's input area.
+        buffer.commit(bytes_transferred);
+    }
+
+    // error
+    return false;
+}
+
+//]
+
+//[example_core_detect_ssl_4
+
+/** Detect a TLS/SSL handshake asynchronously on a stream.
+
+    This function is used to asynchronously determine if a TLS/SSL
+    handshake is being received.
+    The function call always returns immediately. The asynchronous
+    operation will continue until one of the following conditions
+    is true:
+
+    @li The disposition of the handshake is determined
+
+    @li An error occurs
+
+    This operation is implemented in terms of zero or more calls to
+    the next layer's `async_read_some` function, and is known as a
+    <em>composed operation</em>. The program must ensure that the
+    stream performs no other operations until this operation completes.
+
+    Octets read from the stream will be stored in the passed dynamic
+    buffer, which may be used to perform the TLS handshake if the
+    detector returns true, or otherwise consumed by the caller based
+    on the expected protocol.
+
+    @param stream The stream to read from. This type must meet the
+    requirements of @b AsyncReadStream.
+
+    @param buffer The dynamic buffer to use. This type must meet the
+    requirements of @b DynamicBuffer.
+
+    @param handler Invoked when the operation completes.
+    The handler may be moved or copied as needed.
+    The equivalent function signature of the handler must be:
+    @code
+    void handler(
+        error_code const& error,    // Set to the error, if any
+        boost::tribool result       // The result of the detector
+    );
+    @endcode
+    Regardless of whether the asynchronous operation completes
+    immediately or not, the handler will not be invoked from within
+    this function. Invocation of the handler will be performed in a
+    manner equivalent to using `boost::asio::io_context::post`.
+*/
+template<
+    class AsyncReadStream,
+    class DynamicBuffer,
+    class CompletionToken>
+BOOST_ASIO_INITFN_RESULT_TYPE(                      /*< `BOOST_ASIO_INITFN_RESULT_TYPE` customizes the return value based on the completion token >*/
+    CompletionToken,
+    void(boost::beast::error_code, boost::tribool)) /*< This is the signature for the completion handler >*/
+async_detect_ssl(
+    AsyncReadStream& stream,
+    DynamicBuffer& buffer,
+    CompletionToken&& token);
+
+//]
+
+//[example_core_detect_ssl_5
+
+// This is the composed operation.
+template<
+    class AsyncReadStream,
+    class DynamicBuffer,
+    class Handler>
+class detect_ssl_op;
+
+// Here is the implementation of the asynchronous initation function
+template<
+    class AsyncReadStream,
+    class DynamicBuffer,
+    class CompletionToken>
+BOOST_ASIO_INITFN_RESULT_TYPE(
+    CompletionToken,
+    void(boost::beast::error_code, boost::tribool))
+async_detect_ssl(
+    AsyncReadStream& stream,
+    DynamicBuffer& buffer,
+    CompletionToken&& token)
+{
+    namespace beast = boost::beast;
+
+    // Make sure arguments meet the requirements
+    static_assert(beast::is_async_read_stream<AsyncReadStream>::value,
+        "SyncReadStream requirements not met");
+    static_assert(
+        boost::asio::is_dynamic_buffer<DynamicBuffer>::value,
+        "DynamicBuffer requirements not met");
+
+    // This helper manages some of the handler's lifetime and
+    // uses the result and handler specializations associated with
+    // the completion token to help customize the return value.
+    //
+    boost::asio::async_completion<
+        CompletionToken, void(beast::error_code, boost::tribool)> init{token};
+
+    // Create the composed operation and launch it. This is a constructor
+    // call followed by invocation of operator(). We use BOOST_ASIO_HANDLER_TYPE
+    // to convert the completion token into the correct handler type,
+    // allowing user defined specializations of the async result template
+    // to take effect.
+    //
+    detect_ssl_op<
+        AsyncReadStream,
+        DynamicBuffer,
+        BOOST_ASIO_HANDLER_TYPE(
+            CompletionToken, void(beast::error_code, boost::tribool))>{
+                stream, buffer, init.completion_handler}(beast::error_code{}, 0);
+
+    // This hook lets the caller see a return value when appropriate.
+    // For example this might return std::future<error_code, boost::tribool> if
+    // CompletionToken is boost::asio::use_future.
+    //
+    // If a coroutine is used for the token, the return value from
+    // this function will be the `boost::tribool` representing the result.
+    //
+    return init.result.get();
+}
+
+//]
+
+//[example_core_detect_ssl_6
+
+// Read from a stream to invoke is_tls_handshake asynchronously.
+// This will be implemented using Asio's "stackless coroutines"
+// which are based on macros forming a switch statement. The
+// operation is derived from `coroutine` for this reason.
+//
+template<
+    class AsyncReadStream,
+    class DynamicBuffer,
+    class Handler>
+class detect_ssl_op : public boost::asio::coroutine
+{
+    // This composed operation has trivial state,
+    // so it is just kept inside the class and can
+    // be cheaply copied as needed by the implementation.
+
+    AsyncReadStream& stream_;
+    DynamicBuffer& buffer_;
+    Handler handler_;
+    boost::tribool result_ = false;
+
+public:
+    // Boost.Asio requires that handlers are CopyConstructible.
+    // The state for this operation is cheap to copy.
+    detect_ssl_op(detect_ssl_op const&) = default;
+
+    // The constructor just keeps references the callers varaibles.
+    //
+    template<class DeducedHandler>
+    detect_ssl_op(
+        AsyncReadStream& stream,
+        DynamicBuffer& buffer,
+        DeducedHandler&& handler)
+        : stream_(stream)
+        , buffer_(buffer)
+        , handler_(std::forward<DeducedHandler>(handler))
+    {
+    }
+
+    // Associated allocator support. This is Asio's system for
+    // allowing the final completion handler to customize the
+    // memory allocation strategy used for composed operation
+    // states. A composed operation needs to use the same allocator
+    // as the final handler. These declarations achieve that.
+
+    using allocator_type =
+        boost::asio::associated_allocator_t<Handler>;
+
+    allocator_type
+    get_allocator() const noexcept
+    {
+        return (boost::asio::get_associated_allocator)(handler_);
+    }
+
+    // Executor hook. This is Asio's system for customizing the
+    // manner in which asynchronous completion handlers are invoked.
+    // A composed operation needs to use the same executor to invoke
+    // intermediate completion handlers as that used to invoke the
+    // final handler.
+
+    using executor_type = boost::asio::associated_executor_t<
+        Handler, decltype(std::declval<AsyncReadStream&>().get_executor())>;
+
+    executor_type get_executor() const noexcept
+    {
+        return (boost::asio::get_associated_executor)(handler_, stream_.get_executor());
+    }
+
+    // Our main entry point. This will get called as our
+    // intermediate operations complete. Definition below.
+    //
+    void operator()(boost::beast::error_code ec, std::size_t bytes_transferred);
+};
+
+//]
+
+//[example_core_detect_ssl_7
+
+// detect_ssl_op is callable with the signature
+// void(error_code, bytes_transferred),
+// allowing `*this` to be used as a ReadHandler
+//
+template<
+    class AsyncStream,
+    class DynamicBuffer,
+    class Handler>
+void
+detect_ssl_op<AsyncStream, DynamicBuffer, Handler>::
+operator()(boost::beast::error_code ec, std::size_t bytes_transferred)
+{
+    namespace beast = boost::beast;
+
+    // This introduces the scope of the stackless coroutine
+    BOOST_ASIO_CORO_REENTER(*this)
+    {
+        // There could already be data in the buffer
+        // so we do this first, before reading from the stream.
+        result_ = is_ssl_handshake(buffer_.data());
+
+        // If we got an answer, return it
+        if(! boost::indeterminate(result_))
+        {
+            // We need to invoke the handler, but the guarantee
+            // is that the handler will not be called before the
+            // call to async_detect_ssl returns, so we must post
+            // the operation to the executor. The helper function
+            // `bind_handler` lets us bind arguments in a safe way
+            // that preserves the type customization hooks of the
+            // original handler.
+            BOOST_ASIO_CORO_YIELD
+            boost::asio::post(
+                stream_.get_executor(),
+                beast::bind_handler(std::move(*this), ec, 0));
+        }
+        else
+        {
+            // Loop until an error occurs or we get a definitive answer
+            for(;;)
+            {
+                // The algorithm should never need more than 4 bytes
+                BOOST_ASSERT(buffer_.size() < 4);
+
+                BOOST_ASIO_CORO_YIELD
+                {
+                    // Prepare the buffer's output area.
+                    auto const mutable_buffer = buffer_.prepare(beast::read_size(buffer_, 1536));
+
+                    // Try to fill our buffer by reading from the stream
+                    stream_.async_read_some(mutable_buffer, std::move(*this));
+                }
+
+                // Check for an error
+                if(ec)
+                    break;
+
+                // Commit what we read into the buffer's input area.
+                buffer_.commit(bytes_transferred);
+
+                // See if we can detect the handshake
+                result_ = is_ssl_handshake(buffer_.data());
+
+                // If it is detected, call the handler
+                if(! boost::indeterminate(result_))
+                {
+                    // We don't need bind_handler here because we were invoked
+                    // as a result of an intermediate asynchronous operation.
+                    break;
+                }
+            }
+        }
+
+        // Invoke the final handler.
+        handler_(ec, result_);
+    }
+}
+
+//]
+
+#endif
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
+
+// This include is necessary to work with `ssl::stream` and `boost::beast::websocket::stream`
+#include <boost/beast/websocket/ssl.hpp>
+
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ssl/stream.hpp>
+#include <cstddef>
+#include <memory>
+#include <type_traits>
+#include <utility>
+
+/** C++11 enabled SSL socket wrapper
+
+    This wrapper provides an interface identical to `boost::asio::ssl::stream`,
+    with the following additional properties:
+    
+    @li Satisfies @b MoveConstructible
+    
+    @li Satisfies @b MoveAssignable
+   
+    @li Constructible from a moved socket.
+*/
+template<class NextLayer>
+class ssl_stream
+    : public boost::asio::ssl::stream_base
+{
+    using stream_type = boost::asio::ssl::stream<NextLayer>;
+
+    std::unique_ptr<stream_type> p_;
+    boost::asio::ssl::context* ctx_;
+
+public:
+    /// The native handle type of the SSL stream.
+    using native_handle_type = typename stream_type::native_handle_type;
+
+    /// Structure for use with deprecated impl_type.
+    using impl_struct = typename stream_type::impl_struct;
+
+    /// The type of the next layer.
+    using next_layer_type = typename stream_type::next_layer_type;
+
+    /// The type of the lowest layer.
+    using lowest_layer_type = typename stream_type::lowest_layer_type;
+
+    /// The type of the executor associated with the object.
+    using executor_type = typename stream_type::executor_type;
+
+    template<class Arg>
+    ssl_stream(
+        Arg&& arg,
+        boost::asio::ssl::context& ctx)
+        : p_(new stream_type{
+            std::forward<Arg>(arg), ctx})
+        , ctx_(&ctx)
+    {
+    }
+
+    ssl_stream(ssl_stream&& other)
+        : p_(std::move(other.p_))
+        , ctx_(other.ctx_)
+    {
+    }
+
+    ssl_stream& operator=(ssl_stream&& other)
+    {
+        p_ = std::move(other.p_);
+        ctx_ = other.ctx_;
+        return *this;
+    }
+
+    executor_type
+    get_executor() noexcept
+    {
+        return p_->get_executor();
+    }
+
+    native_handle_type
+    native_handle()
+    {
+        return p_->native_handle();
+    }
+
+    next_layer_type const&
+    next_layer() const
+    {
+        return p_->next_layer();
+    }
+
+    next_layer_type&
+    next_layer()
+    {
+        return p_->next_layer();
+    }
+
+    lowest_layer_type&
+    lowest_layer()
+    {
+        return p_->lowest_layer();
+    }
+
+    lowest_layer_type const&
+    lowest_layer() const
+    {
+        return p_->lowest_layer();
+    }
+
+    void
+    set_verify_mode(boost::asio::ssl::verify_mode v)
+    {
+        p_->set_verify_mode(v);
+    }
+
+    boost::system::error_code
+    set_verify_mode(boost::asio::ssl::verify_mode v,
+        boost::system::error_code& ec)
+    {
+        return p_->set_verify_mode(v, ec);
+    }
+
+    void
+    set_verify_depth(int depth)
+    {
+        p_->set_verify_depth(depth);
+    }
+
+    boost::system::error_code
+    set_verify_depth(
+        int depth, boost::system::error_code& ec)
+    {
+        return p_->set_verify_depth(depth, ec);
+    }
+
+    template<class VerifyCallback>
+    void
+    set_verify_callback(VerifyCallback callback)
+    {
+        p_->set_verify_callback(callback);
+    }
+
+    template<class VerifyCallback>
+    boost::system::error_code
+    set_verify_callback(VerifyCallback callback,
+        boost::system::error_code& ec)
+    {
+        return p_->set_verify_callback(callback, ec);
+    }
+
+    void
+    handshake(handshake_type type)
+    {
+        p_->handshake(type);
+    }
+
+    boost::system::error_code
+    handshake(handshake_type type,
+        boost::system::error_code& ec)
+    {
+        return p_->handshake(type, ec);
+    }
+
+    template<class ConstBufferSequence>
+    void
+    handshake(
+        handshake_type type, ConstBufferSequence const& buffers)
+    {
+        p_->handshake(type, buffers);
+    }
+
+    template<class ConstBufferSequence>
+    boost::system::error_code
+    handshake(handshake_type type,
+        ConstBufferSequence const& buffers,
+            boost::system::error_code& ec)
+    {
+        return p_->handshake(type, buffers, ec);
+    }
+
+    template<class HandshakeHandler>
+    BOOST_ASIO_INITFN_RESULT_TYPE(HandshakeHandler,
+        void(boost::system::error_code))
+    async_handshake(handshake_type type,
+        BOOST_ASIO_MOVE_ARG(HandshakeHandler) handler)
+    {
+        return p_->async_handshake(type,
+            BOOST_ASIO_MOVE_CAST(HandshakeHandler)(handler));
+    }
+
+    template<class ConstBufferSequence, class BufferedHandshakeHandler>
+    BOOST_ASIO_INITFN_RESULT_TYPE(BufferedHandshakeHandler,
+        void (boost::system::error_code, std::size_t))
+    async_handshake(handshake_type type, ConstBufferSequence const& buffers,
+        BOOST_ASIO_MOVE_ARG(BufferedHandshakeHandler) handler)
+    {
+        return p_->async_handshake(type, buffers,
+            BOOST_ASIO_MOVE_CAST(BufferedHandshakeHandler)(handler));
+    }
+
+    void
+    shutdown()
+    {
+        p_->shutdown();
+    }
+
+    boost::system::error_code
+    shutdown(boost::system::error_code& ec)
+    {
+        return p_->shutdown(ec);
+    }
+
+    template<class ShutdownHandler>
+    BOOST_ASIO_INITFN_RESULT_TYPE(ShutdownHandler,
+        void (boost::system::error_code))
+    async_shutdown(BOOST_ASIO_MOVE_ARG(ShutdownHandler) handler)
+    {
+        return p_->async_shutdown(
+            BOOST_ASIO_MOVE_CAST(ShutdownHandler)(handler));
+    }
+
+    template<class ConstBufferSequence>
+    std::size_t
+    write_some(ConstBufferSequence const& buffers)
+    {
+        return p_->write_some(buffers);
+    }
+
+    template<class ConstBufferSequence>
+    std::size_t
+    write_some(ConstBufferSequence const& buffers,
+        boost::system::error_code& ec)
+    {
+        return p_->write_some(buffers, ec);
+    }
+
+    template<class ConstBufferSequence, class WriteHandler>
+    BOOST_ASIO_INITFN_RESULT_TYPE(WriteHandler,
+        void (boost::system::error_code, std::size_t))
+    async_write_some(ConstBufferSequence const& buffers,
+        BOOST_ASIO_MOVE_ARG(WriteHandler) handler)
+    {
+        return p_->async_write_some(buffers,
+            BOOST_ASIO_MOVE_CAST(WriteHandler)(handler));
+    }
+
+    template<class MutableBufferSequence>
+    std::size_t
+    read_some(MutableBufferSequence const& buffers)
+    {
+        return p_->read_some(buffers);
+    }
+
+    template<class MutableBufferSequence>
+    std::size_t
+    read_some(MutableBufferSequence const& buffers,
+        boost::system::error_code& ec)
+    {
+        return p_->read_some(buffers, ec);
+    }
+
+    template<class MutableBufferSequence, class ReadHandler>
+    BOOST_ASIO_INITFN_RESULT_TYPE(ReadHandler,
+        void(boost::system::error_code, std::size_t))
+    async_read_some(MutableBufferSequence const& buffers,
+        BOOST_ASIO_MOVE_ARG(ReadHandler) handler)
+    {
+        return p_->async_read_some(buffers,
+            BOOST_ASIO_MOVE_CAST(ReadHandler)(handler));
+    }
+
+    template<class SyncStream>
+    friend
+    void
+    teardown(boost::beast::websocket::role_type,
+        ssl_stream<SyncStream>& stream,
+            boost::system::error_code& ec);
+
+    template<class AsyncStream, class TeardownHandler>
+    friend
+    void
+    async_teardown(boost::beast::websocket::role_type,
+        ssl_stream<AsyncStream>& stream, TeardownHandler&& handler);
+};
+
+// These hooks are used to inform boost::beast::websocket::stream on
+// how to tear down the connection as part of the WebSocket
+// protocol specifications
+
+template<class SyncStream>
+inline
+void
+teardown(
+    boost::beast::websocket::role_type role,
+    ssl_stream<SyncStream>& stream,
+    boost::system::error_code& ec)
+{
+    // Just forward it to the wrapped ssl::stream
+    using boost::beast::websocket::teardown;
+    teardown(role, *stream.p_, ec);
+}
+
+template<class AsyncStream, class TeardownHandler>
+inline
+void
+async_teardown(
+    boost::beast::websocket::role_type role,
+    ssl_stream<AsyncStream>& stream,
+    TeardownHandler&& handler)
+{
+    // Just forward it to the wrapped ssl::stream
+    using boost::beast::websocket::async_teardown;
+    async_teardown(role,
+        *stream.p_, std::forward<TeardownHandler>(handler));
+}
+
+#endif
+
+
+#if XSERVER_PROTOTYPE_BEAST
+
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/beast/websocket.hpp>
+#include <boost/beast/version.hpp>
+#include <boost/asio/bind_executor.hpp>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/signal_set.hpp>
+#include <boost/asio/ssl/stream.hpp>
+#include <boost/asio/strand.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/make_unique.hpp>
+#include <boost/config.hpp>
+#include <algorithm>
+#include <cstdlib>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <string>
+#include <thread>
+#include <vector>
+
+#endif //
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+
+//------------------------------------------------------------------------------
+
+// Echoes back all received WebSocket messages.
+// This uses the Curiously Recurring Template Pattern so that
+// the same code works with both SSL streams and regular sockets.
+template <class Server, class Derived>
+class websocket_session : public XPeer<Server>
+{
+	typedef XPeer<Server> Base;
+	// Access the derived class, this is part of
+	// the Curiously Recurring Template Pattern idiom.
+	Derived &
+	derived()
+	{
+		return static_cast<Derived &>(*this);
+	}
+
+	boost::beast::multi_buffer read_buffers_; //当前收到的包
+	//std::string read_buffer_; //buffer_ => string
+	//x_packet_t packet_; //当前处理包
+	char ping_state_ = 0; //ping pong状态
+	std::list<std::string> write_buffers_;
+	//std::string  write_buffer_;
+	bool write_complete_ = true;
+	boost::mutex write_mutex_;
+
+  protected:
+	boost::asio::strand<
+		boost::asio::io_context::executor_type>
+		strand_;
+	//boost::asio::steady_timer timer_;
+	std::function<void(boost::beast::websocket::frame_type, boost::beast::string_view)>
+		control_callback_;
+
+  public:
+	// Construct the session
+	explicit websocket_session(Server &srv, size_t id, boost::asio::io_context &ioc)
+		: Base(srv, id), strand_(ioc.get_executor())
+	//, timer_(ioc,(std::chrono::steady_clock::time_point::max)())
+	{
+	}
+	~websocket_session()
+	{
+	}
+
+	bool is_open()
+	{
+		return derived().ws().is_open();
+	}
+
+	void close()
+	{
+		server().PostIO(id(),
+					   boost::bind(&Derived::do_close,
+								   derived().shared_from_this()));
+	}
+
+	void ping()
+	{
+		server().PostIO(id(),
+					   boost::bind(&Derived::do_ping,
+								   derived().shared_from_this()));
+	}
+
+	void do_ping()
+	{
+		derived().on_timer({});
+	}
+
+	/*x_packet_t& packet()
+	{
+		if (packet_.empty()) {
+			if (!read_buffer_.empty()) {
+				packet_.req_data = read_buffer_.data();
+				packet_.req_size = read_buffer_.size();
+				packet_.create_time = boost::posix_time::microsec_clock::local_time();
+			}
+			else {
+				derived().do_read();
+			}
+		}
+		return packet_;
+	}
+	void response(const char* buf, size_t len, bool is_last)
+	{
+		BOOST_ASSERT(is_last);
+		if (is_last) {
+			packet_.destroy_time = boost::posix_time::microsec_clock::local_time();
+		}
+		//发送回应,数据发完on_write会自动继续读
+		if (buf && len) {
+			derived().do_write(buf, len);
+		}
+	}
+	void on_packet_complete()
+	{
+		//清除请求
+		packet_.clear();
+
+		// Clear the buffer
+		read_buffers_.consume(read_buffers_.size());
+		read_buffer_.clear();
+	}*/
+
+	void do_write(const char *buf, size_t len)
+	{
+		if (!buf || !len)
+		{
+			return;
+		}
+		boost::mutex::scoped_lock lock(write_mutex_);
+		write_buffers_.emplace_back(buf, len);
+		if (write_complete_)
+		{
+			derived().do_write();
+		}
+	}
+
+	// Start the asynchronous operation
+	template <class Body, class Allocator>
+	void
+	do_accept(boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> req)
+	{
+		// Set the control callback. This will be called
+		// on every incoming ping, pong, and close frame.
+		control_callback_ = std::bind(
+			&Derived::on_control_callback,
+			this,
+			std::placeholders::_1,
+			std::placeholders::_2);
+		derived().ws().control_callback(control_callback_);
+
+		// Set the timer
+		//timer_.expires_after(std::chrono::seconds(15));
+
+		// Accept the websocket handshake
+		derived().ws().async_accept(
+			req,
+			boost::asio::bind_executor(
+				strand_,
+				std::bind(
+					&Derived::on_accept,
+					derived().shared_from_this(),
+					std::placeholders::_1)));
+	}
+	void
+	do_accept()
+	{
+		// Set the control callback. This will be called
+		// on every incoming ping, pong, and close frame.
+		control_callback_ = std::bind(
+			&Derived::on_control_callback,
+			this,
+			std::placeholders::_1,
+			std::placeholders::_2);
+		derived().ws().control_callback(control_callback_);
+
+		// Set the timer
+		//timer_.expires_after(std::chrono::seconds(15));
+
+		// Accept the websocket handshake
+		derived().ws().async_accept(
+			boost::asio::bind_executor(
+				strand_,
+				std::bind(
+					&Derived::on_accept,
+					derived().shared_from_this(),
+					std::placeholders::_1)));
+	}
+
+	void
+	on_accept(const boost::system::error_code &ec)
+	{
+		// Happens when the timer closes the socket
+		if (ec == boost::asio::error::operation_aborted)
+			return;
+
+		if (ec)
+			return on_fail(ec, "accept");
+
+		// Read a message
+		derived().do_read();
+	}
+
+	// Called when the timer expires.
+	void
+	on_timer(const boost::system::error_code &ec)
+	{
+		if (ec && ec != boost::asio::error::operation_aborted)
+			return on_fail(ec, "timer");
+
+		if (!derived().is_open())
+		{
+			return;
+		}
+
+		// See if the timer really expired since the deadline may have moved.
+		//if (timer_.expiry() <= std::chrono::steady_clock::now())
+		{
+			// If this is the first time the timer expired,
+			// send a ping to see if the other end is there.
+			if (derived().is_open() && ping_state_ == 0)
+			{
+				// Note that we are sending a ping
+				ping_state_ = 1;
+
+				// Set the timer
+				//timer_.expires_after(std::chrono::seconds(15));
+
+				// Now send the ping
+				derived().ws().async_ping({},
+										  boost::asio::bind_executor(
+											  strand_,
+											  std::bind(
+												  &Derived::on_ping,
+												  derived().shared_from_this(),
+												  std::placeholders::_1)));
+			}
+			else
+			{
+				// The timer expired while trying to handshake,
+				// or we sent a ping and it never completed or
+				// we never got back a control frame, so close.
+
+				derived().do_timeout();
+				return;
+			}
+		}
+
+		// Wait on the timer
+		/*timer_.async_wait(
+			boost::asio::bind_executor(
+				strand_,
+				std::bind(
+					&Derived::on_timer,
+					derived().shared_from_this(),
+					std::placeholders::_1)));*/
+	}
+
+	// Called to indicate activity from the remote peer
+	void
+	activity()
+	{
+		// Note that the connection is alive
+		ping_state_ = 0;
+
+		// Set the timer
+		//timer_.expires_after(std::chrono::seconds(15));
+
+		server().on_io_activity(derived().shared_from_this());
+	}
+
+	// Called after a ping is sent.
+	void
+	on_ping(const boost::system::error_code &ec)
+	{
+		// Happens when the timer closes the socket
+		if (ec == boost::asio::error::operation_aborted)
+			return;
+
+		if (ec)
+			return on_fail(ec, "ping");
+
+		// Note that the ping was sent.
+		if (ping_state_ == 1)
+		{
+			ping_state_ = 2;
+		}
+		else
+		{
+			// ping_state_ could have been set to 0
+			// if an incoming control frame was received
+			// at exactly the same time we sent a ping.
+			BOOST_ASSERT(ping_state_ == 0);
+		}
+	}
+
+	void
+	on_control_callback(
+		boost::beast::websocket::frame_type kind,
+		boost::beast::string_view payload)
+	{
+		boost::ignore_unused(kind, payload);
+
+		// Note that there is activity
+		derived().activity();
+	}
+
+	void
+	do_read()
+	{
+		// Read a message into our buffer
+		derived().ws().async_read(
+			read_buffers_,
+			boost::asio::bind_executor(
+				strand_,
+				std::bind(
+					&Derived::on_read,
+					derived().shared_from_this(),
+					std::placeholders::_1,
+					std::placeholders::_2)));
+	}
+
+	void
+	on_read(
+		const boost::system::error_code &ec,
+		size_t bytes_transferred)
+	{
+		boost::ignore_unused(bytes_transferred);
+
+		// Happens when the timer closes the socket
+		if (ec == boost::asio::error::operation_aborted)
+			return;
+
+		// This indicates that the websocket_session was closed
+		if (ec == boost::beast::websocket::error::closed)
+			return;
+
+		// Note that there is activity
+		derived().activity();
+
+		if (!ec)
+		{
+			//填充multi_buffer
+			//size_t n = boost::asio::detail::buffer_copy(buffer_.prepare(contents.size()), boost::asio::buffer(contents));
+			//buffer_.commit(n);
+			//读取buffer_
+			/*std::ostringstream oss(read_buffer_);
+			oss << boost::beast::buffers(read_buffers_.data());*/
+			std::string buffer = boost::beast::buffers_to_string(read_buffers_.data());
+			read_buffers_.consume(read_buffers_.size());
+			server().on_io_read(derived().shared_from_this(), buffer);
+		}
+		else
+		{
+			on_fail(ec, "read");
+		}
+	}
+
+	void do_write()
+	{
+		write_complete_ = false;
+		derived().ws().text(derived().ws().got_text());
+		derived().ws().async_write(
+			boost::asio::buffer(write_buffers_.front()),
+			boost::asio::bind_executor(
+				strand_,
+				std::bind(
+					&Derived::on_write,
+					derived().shared_from_this(),
+					std::placeholders::_1,
+					std::placeholders::_2)));
+	}
+
+	void
+	on_write(
+		const boost::system::error_code &ec,
+		size_t bytes_transferred)
+	{
+		boost::ignore_unused(bytes_transferred);
+
+		// Happens when the timer closes the socket
+		if (ec == boost::asio::error::operation_aborted)
+			return;
+
+		if (!ec)
+		{
+			std::string &buffer = write_buffers_.front();
+			server().on_io_write(derived().shared_from_this(), buffer);
+			boost::mutex::scoped_lock lock(write_mutex_);
+			write_complete_ = true;
+			write_buffers_.pop_front();
+			if (!write_buffers_.empty())
+				derived().do_write();
+		}
+		else
+		{
+			return on_fail(ec, "write");
+		}
+	}
+};
+
+#endif //
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE == XSERVER_WEBSOCKET
+
+// Handles a plain WebSocket connection
+template <class Server>
+class plain_websocket_session
+	: public websocket_session<Server, plain_websocket_session<Server>>
+	, public std::enable_shared_from_this<plain_websocket_session<Server>>
+{
+	typedef plain_websocket_session<Server> This;
+	typedef websocket_session<Server, plain_websocket_session<Server>> Base;
+	boost::beast::websocket::stream<boost::asio::ip::tcp::socket> ws_;
+	bool close_ = false;
+
+  public:
+	// Create the plain_websocket_session
+	explicit plain_websocket_session(Server &srv, size_t id, boost::asio::ip::tcp::socket socket)
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_WEBSOCKET, id),
+													 socket.get_executor().context()),
+		  ws_(std::move(socket))
+	{
+	}
+
+	~plain_websocket_session()
+	{
+		server().on_close(this);
+	}
+
+	// Called by the base class
+	boost::beast::websocket::stream<boost::asio::ip::tcp::socket> &
+	ws()
+	{
+		return ws_;
+	}
+
+	bool is_open()
+	{
+		return !close_ && ws_.is_open();
+	}
+
+	// Start the asynchronous operation
+	template <class Body, class Allocator>
+	void
+	run(boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> req)
+	{
+		// Run the timer. The timer is operated
+		// continuously, this simplifies the code.
+		//on_timer({});
+
+		// Accept the WebSocket upgrade request
+		do_accept(std::move(req));
+	}
+	void
+	run()
+	{
+		// Run the timer. The timer is operated
+		// continuously, this simplifies the code.
+		//on_timer({});
+
+		// Accept the WebSocket request
+		do_accept();
+	}
+
+	void
+	do_close()
+	{
+		if (close_)
+			return;
+		close_ = true;
+
+		//boost::system::error_code ec;
+		//timer_.cancel(ec);
+
+		// Close the WebSocket Connection
+		ws_.async_close(
+			boost::beast::websocket::close_code::normal,
+			boost::asio::bind_executor(
+				Base::strand_,
+				std::bind(
+					&This::on_close,
+					shared_from_this(),
+					std::placeholders::_1)));
+	}
+
+	void
+	do_timeout()
+	{
+		// This is so the close can have a timeout
+		if (close_)
+			return;
+		close_ = true;
+
+		// Set the timer
+		//timer_.expires_after(std::chrono::seconds(15));
+
+		// Close the WebSocket Connection
+		ws_.async_close(
+			boost::beast::websocket::close_code::normal,
+			boost::asio::bind_executor(
+				Base::strand_,
+				std::bind(
+					&This::on_close,
+					shared_from_this(),
+					std::placeholders::_1)));
+	}
+
+	void
+	on_close(const boost::system::error_code &ec)
+	{
+		// Happens when close times out
+		if (ec == boost::asio::error::operation_aborted)
+			return;
+
+		if (ec)
+			return on_fail(ec, "close");
+
+		// At this point the connection is gracefully closed
+	}
+};
+
+#endif //
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE == XSERVER_SSL_WEBSOCKET
+
+// Handles an SSL WebSocket connection
+template <class Server>
+class ssl_websocket_session
+	: public websocket_session<Server, ssl_websocket_session<Server>>
+	,  public std::enable_shared_from_this<ssl_websocket_session<Server>>
+{
+	typedef ssl_websocket_session<Server> This;
+	typedef websocket_session<Server, ssl_websocket_session<Server>> Base;
+	boost::beast::websocket::stream<ssl_stream<boost::asio::ip::tcp::socket>> ws_;
+	boost::asio::strand<
+		boost::asio::io_context::executor_type>
+		strand_;
+	bool eof_ = false;
+
+  public:
+	// Create the ssl_websocket_session
+	explicit ssl_websocket_session(Server &srv, size_t id, ssl_stream<boost::asio::ip::tcp::socket> stream)
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_SSL_WEBSOCKET, id), stream.get_executor().context()),
+		  ws_(std::move(stream)), strand_(ws_.get_executor())
+	{
+	}
+	explicit ssl_websocket_session(Server &srv, size_t id, boost::asio::ip::tcp::socket socket, boost::asio::ssl::context &ctx)
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_WEBSOCKET, id), socket.get_executor().context()),
+		  ws_(std::move(socket), ctx), strand_(ws_.get_executor())
+	{
+	}
+
+	~ssl_websocket_session()
+	{
+		server().on_close(this);
+	}
+
+	// Called by the base class
+	boost::beast::websocket::stream<ssl_stream<boost::asio::ip::tcp::socket>> &
+	ws()
+	{
+		return ws_;
+	}
+
+	bool is_open()
+	{
+		return !eof_ && ws_.is_open();
+	}
+
+	void do_close()
+	{
+		// If this is true it means we timed out performing the shutdown
+		if (eof_)
+			return;
+
+		//boost::system::error_code ec;
+		//timer_.cancel(ec);
+
+		do_eof();
+	}
+
+	// Start the asynchronous operation
+	template <class Body, class Allocator>
+	void
+	run(boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> req)
+	{
+		// Run the timer. The timer is operated
+		// continuously, this simplifies the code.
+		//on_timer({});
+
+		// Accept the WebSocket upgrade request
+		do_accept(std::move(req));
+	}
+	void
+	run()
+	{
+		// Perform the SSL handshake
+		ws_.next_layer().async_handshake(
+			boost::asio::ssl::stream_base::server,
+			boost::asio::bind_executor(
+				strand_,
+				std::bind(
+					&This::on_handshake,
+					shared_from_this(),
+					std::placeholders::_1)));
+	}
+
+	void
+	on_handshake(const boost::system::error_code &ec)
+	{
+		if (ec)
+			return on_fail(ec, "handshake");
+
+		// Run the timer. The timer is operated
+		// continuously, this simplifies the code.
+		//on_timer({});
+
+		// Accept the WebSocket request
+		do_accept();
+	}
+
+	void
+	do_eof()
+	{
+		eof_ = true;
+
+		// Set the timer
+		//timer_.expires_after(std::chrono::seconds(15));
+
+		// Perform the SSL shutdown
+		ws_.next_layer().async_shutdown(
+			boost::asio::bind_executor(
+				strand_,
+				std::bind(
+					&This::on_shutdown,
+					shared_from_this(),
+					std::placeholders::_1)));
+	}
+
+	void
+	on_shutdown(const boost::system::error_code &ec)
+	{
+		// Happens when the shutdown times out
+		if (ec == boost::asio::error::operation_aborted)
+			return;
+
+		if (ec)
+			return on_fail(ec, "shutdown");
+
+		// At this point the connection is closed gracefully
+	}
+
+	void
+	do_timeout()
+	{
+		// If this is true it means we timed out performing the shutdown
+		if (eof_)
+			return;
+
+		// Start the timer again
+		//timer_.expires_at(
+		//	(std::chrono::steady_clock::time_point::max)());
+		//on_timer({});
+		do_eof();
+	}
+};
+
+#endif //
+
+#if XSERVER_PROTOTYPE_HTTP
+
+template <class Server, class Body, class Allocator>
+void upgrade_websocket_session(Server &srv, size_t id,
+							   boost::asio::ip::tcp::socket socket,
+							   boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> req)
+{
+	std::make_shared<plain_websocket_session<Server>>(srv, id,
+											  std::move(socket))
+		->run(std::move(req));
+}
+
+template <class Server, class Body, class Allocator>
+void upgrade_websocket_session(Server &srv, size_t id,
+							   ssl_stream<boost::asio::ip::tcp::socket> stream,
+							   boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> req)
+{
+	std::make_shared<ssl_websocket_session<Server>>(srv, id,
+											std::move(stream))
+		->run(std::move(req));
+}
+
+//------------------------------------------------------------------------------
+
+// Handles an HTTP server connection.
+// This uses the Curiously Recurring Template Pattern so that
+// the same code works with both SSL streams and regular sockets.
+template <class Server, class Derived>
+class http_session : public XPeer<Server>
+{
+	typedef XPeer<Server> Base;
+	// Access the derived class, this is part of
+	// the Curiously Recurring Template Pattern idiom.
+	Derived &
+	derived()
+	{
+		return static_cast<Derived &>(*this);
+	}
+
+	// This queue is used for HTTP pipelining.
+	class queue
+	{
+		enum
+		{
+			// Maximum number of responses we will queue
+			limit = 8
+		};
+
+		// The type-erased, saved work item
+		struct work
+		{
+			virtual ~work() = default;
+			virtual void operator()() = 0;
+		};
+
+		http_session &self_;
+		std::vector<std::unique_ptr<work>> items_;
+
+	  public:
+		explicit queue(http_session &self)
+			: self_(self)
+		{
+			static_assert(limit > 0, "queue limit must be positive");
+			items_.reserve(limit);
+		}
+
+		// Returns `true` if we have reached the queue limit
+		bool
+		is_full() const
+		{
+			return items_.size() >= limit;
+		}
+
+		// Called when a message finishes sending
+		// Returns `true` if the caller should initiate a read
+		bool
+		on_write()
+		{
+			BOOST_ASSERT(!items_.empty());
+			auto const was_full = is_full();
+			items_.erase(items_.begin());
+			if (!items_.empty())
+				(*items_.front())();
+			return was_full;
+		}
+
+		// Called by the HTTP handler to send a response.
+		template <bool isRequest, class Body, class Fields>
+		void
+		operator()(boost::beast::http::message<isRequest, Body, Fields> &&msg)
+		{
+			// This holds a work item
+			struct work_impl : work
+			{
+				http_session &self_;
+				boost::beast::http::message<isRequest, Body, Fields> msg_;
+
+				work_impl(
+					http_session &self,
+					boost::beast::http::message<isRequest, Body, Fields> &&msg)
+					: self_(self), msg_(std::move(msg))
+				{
+				}
+
+				void
+				operator()()
+				{
+					boost::beast::http::async_write(
+						self_.derived().stream(),
+						msg_,
+						boost::asio::bind_executor(
+							self_.strand_,
+							std::bind(
+								&Derived::on_write,
+								self_.derived().shared_from_this(),
+								std::placeholders::_1,
+								msg_.need_eof())));
+				}
+			};
+
+			// Allocate and store the work
+			items_.emplace_back(new work_impl(self_, std::move(msg)));
+
+			// If there was no previous work, start this one
+			if (items_.size() == 1)
+				(*items_.front())();
+		}
+	};
+
+	std::string const &doc_root_;
+	boost::beast::http::request<boost::beast::http::string_body> req_; //当前收到的请求包
+	queue queue_;													   //发送队列
+																	   // class x_http_packet_t : public x_packet_t
+																	   // {
+																	   // public:
+																	   // 	boost::beast::http::request<boost::beast::http::string_body> req_;
+																	   // };
+																	   // x_http_packet_t packet_; //当前请求处理包，里面记录req_对象指针和res对象指针
+
+  protected:
+	boost::asio::steady_timer timer_;
+	boost::asio::strand<
+		boost::asio::io_context::executor_type>
+		strand_;
+	boost::beast::flat_buffer buffer_;
+
+  public:
+	// Construct the session
+	http_session(Server &srv, size_t id,
+				 boost::asio::io_context &ioc,
+				 boost::beast::flat_buffer buffer,
+				 std::string const &doc_root)
+		: Base(srv, id), doc_root_(doc_root), queue_(*this), timer_(ioc,
+																	 (std::chrono::steady_clock::time_point::max)()),
+		  strand_(ioc.get_executor()), buffer_(std::move(buffer))
+	{
+	}
+
+	void close()
+	{
+		server().PostIO(id(),
+					   boost::bind(&Derived::do_close,
+								   derived().shared_from_this()));
+	}
+
+	// x_packet_t& packet()
+	// {
+	// 	if (packet_.empty()) {
+	// 		packet_.req_ = std::move(req_);
+	// 		packet_.req_size = 1; //设置有效标志
+	// 		packet_.req_data = (const char*)&packet_.req_;
+	// 		packet_.create_time = boost::posix_time::microsec_clock::local_time();
+	// 	}
+	// 	return packet_;
+	// }
+	// void response(const char* buf, size_t len, bool is_last)
+	// {
+	// 	BOOST_ASSERT(is_last);
+	// 	if (is_last) {
+	// 		packet_.destroy_time = boost::posix_time::microsec_clock::local_time();
+	// 	}
+	// 	//发送回应
+	// 	/*boost::beast::http::response<boost::beast::http::string_body> res{ boost::beast::http::status::ok, req_.req_data.version() };
+	// 	res.set(boost::beast::http::field::server, BOOST_BEAST_VERSION_STRING);
+	// 	res.set(boost::beast::http::field::content_type, "text/html");
+	// 	res.keep_alive(req.keep_alive());
+	// 	res.body() = buf;
+	// 	res.prepare_payload();
+	// 	response(res);*/
+	// }
+	// template<bool isRequest, class Body, class Fields>
+	// void
+	// 	response(boost::beast::http::message<isRequest, Body, Fields>&& msg)
+	// {
+	// 	// Send the response
+	// 	queue_(msg);
+	// }
+	// void on_packet_complete()
+	// {
+	// 	//请求处理完成
+	// 	size_t req_size = packet_.req_size;
+	// 	//清除请求
+	// 	packet_.clear();
+
+	// 	// If we aren't at the queue limit, try to pipeline another request
+	// 	if (!queue_.is_full())
+	// 		derived().do_read();
+	// }
+
+	void
+	do_read()
+	{
+		// Set the timer
+		timer_.expires_after(std::chrono::seconds(15));
+
+		// Read a request
+		boost::beast::http::async_read(
+			derived().stream(),
+			buffer_,
+			req_,
+			boost::asio::bind_executor(
+				strand_,
+				std::bind(
+					&Derived::on_read,
+					derived().shared_from_this(),
+					std::placeholders::_1)));
+	}
+
+	// Called when the timer expires.
+	void
+	on_timer(const boost::system::error_code &ec)
+	{
+		if (ec && ec != boost::asio::error::operation_aborted)
+			return on_fail(ec, "timer");
+
+		if (!derived().is_open())
+		{
+			return;
+		}
+
+		// Verify that the timer really expired since the deadline may have moved.
+		if (timer_.expiry() <= std::chrono::steady_clock::now())
+			return derived().do_timeout();
+
+		// Wait on the timer
+		timer_.async_wait(
+			boost::asio::bind_executor(
+				strand_,
+				std::bind(
+					&Derived::on_timer,
+					derived().shared_from_this(),
+					std::placeholders::_1)));
+	}
+
+	void
+	on_read(const boost::system::error_code &ec)
+	{
+		// Happens when the timer closes the socket
+		if (ec == boost::asio::error::operation_aborted)
+			return;
+
+		// This means they closed the connection
+		if (ec == boost::beast::http::error::end_of_stream)
+			return derived().do_eof();
+
+		if (ec)
+			return on_fail(ec, "read");
+
+		// See if it is a WebSocket Upgrade
+		if (boost::beast::websocket::is_upgrade(req_))
+		{
+			// Transfer the stream to a new WebSocket session
+			return upgrade_websocket_session(server(), id(),
+											 derived().release_stream(),
+											 std::move(req_));
+		}
+
+		server().on_io_read(derived().shared_from_this(), doc_root_, std::move(req_), queue_);
+
+		// If we aren't at the queue limit, try to pipeline another request
+		if (!queue_.is_full())
+			derived().do_read();
+	}
+
+	void
+	on_write(const boost::system::error_code &ec, bool close)
+	{
+		// Happens when the timer closes the socket
+		if (ec == boost::asio::error::operation_aborted)
+			return;
+
+		if (ec)
+			return on_fail(ec, "write");
+
+		if (close)
+		{
+			// This means we should close the connection, usually because
+			// the response indicated the "Connection: close" semantic.
+			return derived().do_eof();
+		}
+
+		// Inform the queue that a write completed
+		if (queue_.on_write())
+		{
+			// Read another request
+			derived().do_read();
+		}
+	}
+};
+
+// Handles a plain HTTP connection
+template <class Server>
+class plain_http_session
+	: public http_session<Server, plain_http_session<Server>>,
+	  public std::enable_shared_from_this<plain_http_session<Server>>
+{
+	typedef plain_http_session<Server> This;
+	typedef http_session<Server, plain_http_session<Server>> Base;
+	boost::asio::ip::tcp::socket socket_;
+	boost::asio::strand<
+		boost::asio::io_context::executor_type>
+		strand_;
+
+  public:
+	// Create the plain_http_session
+	plain_http_session(Server &srv, size_t id,
+					   boost::asio::ip::tcp::socket socket,
+					   boost::beast::flat_buffer buffer,
+					   std::string const &doc_root)
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_HTTP, id),
+										   socket.get_executor().context(),
+										   std::move(buffer),
+										   doc_root),
+		  socket_(std::move(socket)), strand_(socket_.get_executor())
+	{
+	}
+
+	~plain_http_session()
+	{
+		server().on_close(this);
+	}
+
+	// Called by the base class
+	boost::asio::ip::tcp::socket &
+	stream()
+	{
+		return socket_;
+	}
+
+	// Called by the base class
+	boost::asio::ip::tcp::socket
+	release_stream()
+	{
+		return std::move(socket_);
+	}
+
+	// Start the asynchronous operation
+	void
+	run()
+	{
+		// Run the timer. The timer is operated
+		// continuously, this simplifies the code.
+		on_timer({});
+
+		do_read();
+	}
+
+	bool is_open()
+	{
+		return socket_.is_open();
+	}
+
+	void do_close()
+	{
+		return do_timeout();
+	}
+
+	void
+	do_eof()
+	{
+		// Send a TCP shutdown
+		boost::system::error_code ec;
+		socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_send, ec);
+
+		// At this point the connection is closed gracefully
+	}
+
+	void
+	do_timeout()
+	{
+		// Closing the socket cancels all outstanding operations. They
+		// will complete with boost::asio::error::operation_aborted
+		boost::system::error_code ec;
+		socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+		socket_.close(ec);
+	}
+};
+
+// Handles an SSL HTTP connection
+template <class Server>
+class ssl_http_session
+	: public http_session<Server, ssl_http_session<Server>>,
+	  public std::enable_shared_from_this<ssl_http_session<Server>>
+{
+	typedef ssl_http_session<Server> This;
+	typedef http_session<Server, ssl_http_session<Server>> Base;
+	ssl_stream<boost::asio::ip::tcp::socket> stream_;
+	boost::asio::strand<
+		boost::asio::io_context::executor_type>
+		strand_;
+	bool eof_ = false;
+
+  public:
+	// Create the http_session
+	ssl_http_session(Server &srv, size_t id,
+					 boost::asio::ip::tcp::socket socket,
+					 boost::asio::ssl::context &ctx,
+					 boost::beast::flat_buffer buffer,
+					 std::string const &doc_root)
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_HTTPS, id),
+										 socket.get_executor().context(),
+										 std::move(buffer),
+										 doc_root),
+		  stream_(std::move(socket), ctx), strand_(stream_.get_executor())
+	{
+	}
+
+	~ssl_http_session()
+	{
+		server().on_close(this);
+	}
+
+	bool is_open()
+	{
+		return !eof_ && stream_.next_layer().is_open();
+	}
+
+	void do_close()
+	{
+		return do_timeout();
+	}
+
+	// Called by the base class
+	ssl_stream<boost::asio::ip::tcp::socket> &
+	stream()
+	{
+		return stream_;
+	}
+
+	// Called by the base class
+	ssl_stream<boost::asio::ip::tcp::socket>
+	release_stream()
+	{
+		return std::move(stream_);
+	}
+
+	// Start the asynchronous operation
+	void
+	run()
+	{
+		// Run the timer. The timer is operated
+		// continuously, this simplifies the code.
+		on_timer({});
+
+		// Set the timer
+		Base::timer_.expires_after(std::chrono::seconds(15));
+
+		// Perform the SSL handshake
+		// Note, this is the buffered version of the handshake.
+		stream_.async_handshake(
+			boost::asio::ssl::stream_base::server,
+			Base::buffer_.data(),
+			boost::asio::bind_executor(
+				strand_,
+				std::bind(
+					&This::on_handshake,
+					shared_from_this(),
+					std::placeholders::_1,
+					std::placeholders::_2)));
+	}
+	void
+	on_handshake(
+		const boost::system::error_code &ec,
+		size_t bytes_used)
+	{
+		// Happens when the handshake times out
+		if (ec == boost::asio::error::operation_aborted)
+			return;
+
+		if (ec)
+			return on_fail(ec, "handshake");
+
+		// Consume the portion of the buffer used by the handshake
+		Base::buffer_.consume(bytes_used);
+
+		do_read();
+	}
+
+	void
+	do_eof()
+	{
+		eof_ = true;
+
+		// Set the timer
+		Base::timer_.expires_after(std::chrono::seconds(15));
+
+		// Perform the SSL shutdown
+		stream_.async_shutdown(
+			boost::asio::bind_executor(
+				strand_,
+				std::bind(
+					&This::on_shutdown,
+					shared_from_this(),
+					std::placeholders::_1)));
+	}
+
+	void
+	on_shutdown(const boost::system::error_code &ec)
+	{
+		// Happens when the shutdown times out
+		if (ec == boost::asio::error::operation_aborted)
+			return;
+
+		if (ec)
+			return on_fail(ec, "shutdown");
+
+		// At this point the connection is closed gracefully
+	}
+
+	void
+	do_timeout()
+	{
+		// If this is true it means we timed out performing the shutdown
+		if (eof_)
+			return;
+
+		// Start the timer again
+		Base::timer_.expires_at(
+			(std::chrono::steady_clock::time_point::max)());
+		on_timer({});
+		do_eof();
+	}
+};
+
+//------------------------------------------------------------------------------
+
+// Detects SSL handshakes
+template <class Server>
+class detect_session
+	: public XPeer<Server>,
+	  public std::enable_shared_from_this<detect_session<Server>>
+{
+	typedef detect_session<Server> This;
+	typedef XPeer<Server> Base;
+	boost::asio::ip::tcp::socket socket_;
+	boost::asio::ssl::context &ctx_;
+	boost::asio::strand<
+		boost::asio::io_context::executor_type>
+		strand_;
+	std::string const &doc_root_;
+	boost::beast::flat_buffer buffer_;
+
+  public:
+	explicit
+		// Detects SSL handshakes
+		detect_session(Server &srv, size_t id,
+					   boost::asio::ip::tcp::socket socket,
+					   boost::asio::ssl::context &ctx,
+					   std::string const &doc_root)
+		: Base(srv, PEER_ID(id)), socket_(std::move(socket)), ctx_(ctx), strand_(socket_.get_executor()), doc_root_(doc_root)
+	{
+	}
+
+	// Launch the detector
+	void
+	run()
+	{
+		async_detect_ssl(
+			socket_,
+			buffer_,
+			boost::asio::bind_executor(
+				strand_,
+				std::bind(
+					&This::on_detect,
+					shared_from_this(),
+					std::placeholders::_1,
+					std::placeholders::_2)));
+	}
+
+	void
+	on_detect(const boost::system::error_code &ec, boost::tribool result)
+	{
+		if (ec)
+			return on_fail(ec, "detect");
+
+		if (result)
+		{
+			// Launch SSL session
+			std::make_shared<ssl_http_session<Server>>(server(), id(),
+											   std::move(socket_),
+											   ctx_,
+											   std::move(buffer_),
+											   doc_root_)
+				->run();
+			return;
+		}
+
+		// Launch plain session
+		std::make_shared<plain_http_session<Server>>(server(), id(),
+											 std::move(socket_),
+											 std::move(buffer_),
+											 doc_root_)
+			->run();
+	}
+};
+
+#endif //
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+
+// WebSocket client
+template <class Server, class Derived>
+class websocket_client_session
+	: public XPeer<Server>,
+	  public XResolver<Server, Derived>
+{
+	typedef XPeer<Server> Base;
+	typedef XResolver<Server, Derived> Resolver;
+	boost::beast::multi_buffer read_buffers_; //当前收到的包
+	//std::string read_buffer_; //buffer_ => string
+	//x_packet_t packet_;
+	std::list<std::string> write_buffers_;
+	//std::string  write_buffer_;
+	bool write_complete_ = true;
+	boost::mutex write_mutex_;
+
+  protected:
+	std::function<void(boost::beast::websocket::frame_type, boost::beast::string_view)>
+		control_callback_;
+
+  public:
+	// Resolver and socket require an io_context
+	explicit websocket_client_session(Server &srv, size_t id, boost::asio::io_context &io_context)
+		: Base(srv, id), Resolver(io_context)
+	{
+	}
+	~websocket_client_session()
+	{
+	}
+
+	bool is_open()
+	{
+		return derived().ws().is_open();
+	}
+
+	void close()
+	{
+		server().PostIO(id(),
+					   boost::bind(&Derived::do_close,
+								   derived().shared_from_this()));
+	}
+
+	void ping()
+	{
+		server().PostIO(id(),
+					   boost::bind(&Derived::do_ping,
+								   derived().shared_from_this()));
+	}
+
+	void do_ping()
+	{
+		//on_timer({});
+	}
+
+	/*x_packet_t& packet()
+	{
+		if (packet_.empty()) {
+			if (!read_buffer_.empty()) {
+				packet_.req_data = read_buffer_.data();
+				packet_.req_size = read_buffer_.size();
+				packet_.create_time = boost::posix_time::microsec_clock::local_time();
+			}
+			else {
+				derived().do_read();
+			}
+		}
+		return packet_;
+	}
+	void response(const char* buf, size_t len, bool is_last)
+	{
+		BOOST_ASSERT(is_last);
+		if (is_last) {
+			packet_.destroy_time = boost::posix_time::microsec_clock::local_time();
+		}
+		//发送回应,数据发完on_write会自动继续读
+		if (buf && len) {
+			derived().do_write(buf, len);
+		}
+	}
+	void on_packet_complete()
+	{
+		//清除请求
+		packet_.clear();
+
+		// Clear the buffer
+		read_buffers_.consume(read_buffers_.size());
+		read_buffer_.clear();
+	}*/
+
+	void do_write(const char *buf, size_t len)
+	{
+		if (!buf || !len)
+		{
+			return;
+		}
+		boost::mutex::scoped_lock lock(write_mutex_);
+		write_buffers_.emplace_back(buf, len);
+		if (write_complete_)
+		{
+			derived().do_write();
+		}
+	}
+
+	// Start the asynchronous operation
+	void
+	run(const std::string &addr, const std::string &port)
+	{
+		// Save these for later
+		//text_ = text;
+
+		// Set the control callback. This will be called
+		// on every incoming ping, pong, and close frame.
+		control_callback_ = std::bind(
+			&Derived::on_control_callback,
+			this,
+			std::placeholders::_1,
+			std::placeholders::_2);
+		derived().ws().control_callback(control_callback_);
+
+		derived().do_resolve(addr, port);
+	}
+
+	void
+	do_handshake()
+	{
+#if 0
+		// Perform the websocket handshake
+		derived().ws().async_handshake(Resolver::addr(), "/",
+			std::bind(
+				&Derived::on_handshake,
+				derived().shared_from_this(),
+				std::placeholders::_1));
+#else
+		boost::system::error_code ec;
+		derived().ws().handshake(Resolver::addr(), "/", ec);
+		derived().on_handshake(ec);
+#endif //
+	}
+
+	void
+	on_handshake(const boost::system::error_code &ec)
+	{
+		if (ec)
+			return on_fail(ec, "handshake");
+
+		server().on_io_connect(derived().shared_from_this());
+		derived().do_read();
+	}
+
+	// Called to indicate activity from the remote peer
+	void
+	activity()
+	{
+		server().on_io_activity(derived().shared_from_this());
+	}
+
+	// Called after a pong is sent.
+	void
+	on_pong(const boost::system::error_code &ec)
+	{
+		if (ec)
+			return on_fail(ec, "pong");
+
+		// Note that the pong was sent.
+	}
+
+	void
+	on_control_callback(
+		boost::beast::websocket::frame_type kind,
+		boost::beast::string_view payload)
+	{
+		//boost::ignore_unused(kind, payload);
+
+		derived().activity();
+
+		if (kind == boost::beast::websocket::frame_type::ping)
+		{
+			// Now send the pong
+			derived().ws().async_pong({},
+									  std::bind(
+										  &Derived::on_pong,
+										  derived().shared_from_this(),
+										  std::placeholders::_1));
+		}
+	}
+
+	void do_write()
+	{
+		write_complete_ = false;
+		derived().ws().text(derived().ws().got_text());
+		derived().ws().async_write(
+			boost::asio::buffer(write_buffers_.front()),
+			std::bind(
+				&Derived::on_write,
+				derived().shared_from_this(),
+				std::placeholders::_1,
+				std::placeholders::_2));
+	}
+
+	void
+	on_write(
+		const boost::system::error_code &ec,
+		size_t bytes_transferred)
+	{
+		boost::ignore_unused(bytes_transferred);
+
+		if (!ec)
+		{
+			std::string &buffer = write_buffers_.front();
+			server().on_io_write(derived().shared_from_this(), buffer);
+			boost::mutex::scoped_lock lock(write_mutex_);
+			write_complete_ = true;
+			write_buffers_.pop_front();
+			if (!write_buffers_.empty())
+				derived().do_write();
+		}
+		else
+		{
+			return on_fail(ec, "write");
+		}
+	}
+
+	void do_read()
+	{
+		// Read a message into our buffer
+		derived().ws().async_read(
+			read_buffers_,
+			std::bind(
+				&Derived::on_read,
+				derived().shared_from_this(),
+				std::placeholders::_1,
+				std::placeholders::_2));
+	}
+
+	void
+	on_read(
+		const boost::system::error_code &ec,
+		size_t bytes_transferred)
+	{
+		boost::ignore_unused(bytes_transferred);
+
+		derived().activity();
+
+		if (!ec)
+		{
+			//填充buffer_
+			//size_t n = boost::asio::detail::buffer_copy(buffer_.prepare(contents.size()), boost::asio::buffer(contents));
+			//buffer_.commit(n);
+			//读取buffer_
+			/*std::ostringstream oss(read_buffer_);
+			oss << boost::beast::buffers(read_buffers_.data());*/
+			std::string buffer = boost::beast::buffers_to_string(read_buffers_.data());
+			read_buffers_.consume(read_buffers_.size());
+			server().on_io_read(derived().shared_from_this(), buffer);
+		}
+		else
+		{
+			on_fail(ec, "read");
+		}
+	}
+
+	void do_close()
+	{
+		// Close the WebSocket connection
+		derived().ws().async_close(boost::beast::websocket::close_code::normal,
+								   std::bind(
+									   &Derived::on_close,
+									   derived().shared_from_this(),
+									   std::placeholders::_1));
+	}
+
+	void
+	on_close(const boost::system::error_code &ec)
+	{
+		if (ec)
+			return on_fail(ec, "close");
+
+		// If we get here then the connection is closed gracefully
+	}
+};
+
+#endif //
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE == XSERVER_WEBSOCKET
+
+// Handles a plain WebSocket connection
+template <class Server>
+class plain_websocket_client_session
+	: public websocket_client_session<Server, plain_websocket_client_session<Server>>,
+	  public std::enable_shared_from_this<plain_websocket_client_session<Server>>
+{
+	typedef plain_websocket_client_session<Server> This;
+	typedef websocket_client_session<Server, plain_websocket_client_session<Server>> Base;
+	boost::beast::websocket::stream<boost::asio::ip::tcp::socket> ws_;
+
+  public:
+	// Create the plain_websocket_client_session
+	explicit
+		// Handles a plain WebSocket connection
+		plain_websocket_client_session(Server &srv, size_t id, boost::asio::ip::tcp::socket sock)
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_WEBSOCKET_CLIENT, id), sock.get_executor().context()), ws_(std::move(sock))
+	{
+	}
+
+	~plain_websocket_client_session()
+	{
+		server().on_close(this);
+	}
+
+	boost::beast::websocket::stream<boost::asio::ip::tcp::socket> &
+	ws()
+	{
+		return ws_;
+	}
+
+	void
+	do_connect(boost::asio::ip::tcp::resolver::results_type results)
+	{
+		LOG4I("XPEER(%d) %s:%s  CONNECTING", id(), addr().c_str(), port().c_str());
+		// Make the connection on the IP address we get from a lookup
+		boost::asio::async_connect(
+			derived().ws().next_layer(),
+			results.begin(),
+			results.end(),
+			std::bind(
+				&This::on_connect,
+				shared_from_this(),
+				std::placeholders::_1));
+	}
+
+	void
+	on_connect(const boost::system::error_code &ec)
+	{
+		if (ec)
+			return on_fail(ec, "connect");
+
+		do_handshake();
+	}
+};
+
+#endif //
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE == XSERVER_SSL_WEBSOCKET
+
+// Handles an SSL WebSocket connection
+template <class Server>
+class ssl_websocket_client_session
+	: public websocket_client_session<Server, ssl_websocket_client_session<Server>>,
+	  public std::enable_shared_from_this<ssl_websocket_client_session<Server>>
+{
+	typedef ssl_websocket_client_session<Server> This;
+	typedef websocket_client_session<Server, ssl_websocket_client_session<Server>> Base;
+	boost::beast::websocket::stream<ssl_stream<boost::asio::ip::tcp::socket>> ws_;
+
+  public:
+	// Create the ssl_websocket_client_session
+	explicit ssl_websocket_client_session(Server &srv, size_t id, boost::asio::ip::tcp::socket sock, boost::asio::ssl::context &ctx)
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_SSL_WEBSOCKET_CLIENT, id), sock.get_executor().context()), ws_(std::move(sock), ctx)
+	{
+	}
+
+	~ssl_websocket_client_session()
+	{
+		server().on_close(this);
+	}
+
+	// Called by the base class
+	boost::beast::websocket::stream<ssl_stream<boost::asio::ip::tcp::socket>> &
+	ws()
+	{
+		return ws_;
+	}
+
+	void
+	do_connect(boost::asio::ip::tcp::resolver::results_type results)
+	{
+		LOG4I("XPEER(%d) %s:%s  CONNECTING", id(), addr().c_str(), port().c_str());
+		// Make the connection on the IP address we get from a lookup
+		boost::asio::async_connect(
+			ws_.next_layer().next_layer(),
+			results.begin(),
+			results.end(),
+			std::bind(
+				&This::on_connect,
+				shared_from_this(),
+				std::placeholders::_1));
+	}
+
+	void
+	on_connect(boost::system::error_code ec)
+	{
+		if (ec)
+			return on_fail(ec, "connect");
+
+		do_ssl_handshake();
+	}
+
+	void
+	do_ssl_handshake()
+	{
+
+		// Perform the SSL handshake
+		ws_.next_layer().async_handshake(
+			boost::asio::ssl::stream_base::client,
+			std::bind(
+				&ssl_websocket_client_session::on_ssl_handshake,
+				shared_from_this(),
+				std::placeholders::_1));
+	}
+
+	void
+	on_ssl_handshake(boost::system::error_code ec)
+	{
+		if (ec)
+			return on_fail(ec, "ssl_handshake");
+
+		do_handshake();
+	}
+};
+
+#endif //
+
+template <class Server>
+class XIOService
+{
+  public:
+	XIOService(Server &srv)
+		: server_(srv)
+	{
+	}
+
+	~XIOService()
+	{
+	}
+
+	bool Start(int io_thread)
+	{
+		size_t i;
+
+		IOService_.resize(io_thread);
+		IOWork_.resize(io_thread);
+		IOThread_.resize(io_thread);
+
+		for (i = 0; i < IOThread_.size(); ++i)
+		{
+			IOService_[i] = boost::shared_ptr<boost::asio::io_service>(new boost::asio::io_service());
+			IOWork_[i] = boost::shared_ptr<boost::asio::io_service::work>(new boost::asio::io_service::work(*IOService_[i]));
+			IOThread_[i] = boost::shared_ptr<boost::thread>(new boost::thread(
+				//boost::bind(&boost::asio::io_service::run, IOService_[i])
+				[this, i]() {
+					server_.on_io_init(i);
+					IOService_[i]->run();
+					server_.on_io_term(i);
+				}));
+		}
+
+		return true;
+	}
+
+	void Stop()
+	{
+		size_t i;
+
+		for (i = 0; i < IOThread_.size(); ++i)
+		{
+			IOService_[i]->stop();
+			IOThread_[i]->join();
+			IOService_[i]->reset();
+		}
+
+		IOWork_.clear();
+		IOService_.clear();
+		IOThread_.clear();
+	}
+
+	template <typename F>
+	void Post(size_t index, F f)
+	{
+		//未使用strand来post任务时候 执行f顺序是不确定的
+		//而使用了strand后 显示是按照f顺序依次执行
+		get_service(index).post(f);
+	}
+
+	boost::asio::deadline_timer *CreateTimer(size_t index)
+	{
+		boost::asio::deadline_timer *timer_ptr = new boost::asio::deadline_timer(get_service(index));
+		BOOST_ASSERT(timer_ptr);
+		return timer_ptr;
+	}
+	template <typename F>
+	void PostTimer(boost::asio::deadline_timer *timer_ptr, size_t millis, F f)
+	{
+		BOOST_ASSERT(timer_ptr);
+		timer_ptr->expires_from_now(boost::posix_time::milliseconds(millis));
+		timer_ptr->async_wait(f);
+	}
+	void KillTimer(boost::asio::deadline_timer *timer_ptr)
+	{
+		BOOST_ASSERT(timer_ptr);
+		delete timer_ptr;
+	}
+
+	boost::asio::io_service &get_service(size_t index)
+	{
+		index = index % IOService_.size();
+		return *IOService_[index];
+	}
+
+  private:
+	Server &server_;
+	std::vector<boost::shared_ptr<boost::asio::io_service>> IOService_;
+	std::vector<boost::shared_ptr<boost::asio::io_service::work>> IOWork_;
+	std::vector<boost::shared_ptr<boost::thread>> IOThread_;
+};
+
+
+template <class Server>
+class XWorkService
+{
+  public:
+	XWorkService(Server &srv)
+		: server_(srv)
+	{
+	}
+
+	~XWorkService()
+	{
+	}
+
+	bool Start(int work_thread)
+	{
+		size_t i;
+
+		WorkService_.resize(work_thread);
+		Work_.resize(work_thread);
+		Strand_.resize(work_thread);
+		WorkThread_.resize(work_thread);
+
+		for (i = 0; i < WorkService_.size(); i++)
+		{
+			WorkService_[i] = boost::shared_ptr<boost::asio::io_service>(new boost::asio::io_service());
+			Work_[i] = boost::shared_ptr<boost::asio::io_service::work>(new boost::asio::io_service::work(*WorkService_[i]));
+			Strand_[i] = boost::shared_ptr<boost::asio::io_service::strand>(new boost::asio::io_service::strand(*WorkService_[i]));
+			WorkThread_[i] = boost::shared_ptr<boost::thread>(new boost::thread(
+				//boost::bind(&boost::asio::io_service::run, WorkService_[i])
+				[this, i]() {
+					server_.on_work_init(i);
+					WorkService_[i]->run();
+					server_.on_work_term(i);
+				}));
+		}
+
+		return true;
+	}
+
+	void Stop()
+	{
+		size_t i;
+
+		for (i = 0; i < WorkService_.size(); ++i)
+		{
+			WorkService_[i]->stop();
+			WorkThread_[i]->join();
+			WorkService_[i]->reset();
+		}
+
+		Strand_.clear();
+		Work_.clear();
+		WorkService_.clear();
+		WorkThread_.clear();
+	}
+
+	template <typename F>
+	void Post(size_t index, F f)
+	{
+		//未使用strand来post任务时候 执行f顺序是不确定的
+		//而使用了strand后 显示是按照f顺序依次执行
+		get_service(index).post(f);
+	}
+
+	boost::asio::deadline_timer *CreateTimer(size_t index)
+	{
+		boost::asio::deadline_timer *timer_ptr = new boost::asio::deadline_timer(get_service(index));
+		BOOST_ASSERT(timer_ptr);
+		return timer_ptr;
+	}
+	template <typename F>
+	void PostTimer(boost::asio::deadline_timer *timer_ptr, size_t millis, F f)
+	{
+		BOOST_ASSERT(timer_ptr);
+		timer_ptr->expires_from_now(boost::posix_time::milliseconds(millis));
+		timer_ptr->async_wait(f);
+	}
+	void KillTimer(boost::asio::deadline_timer *timer_ptr)
+	{
+		BOOST_ASSERT(timer_ptr);
+		delete timer_ptr;
+	}
+
+	boost::asio::io_service &get_service(size_t index)
+	{
+		index = index % WorkService_.size();
+		return *WorkService_[index];
+	}
+
+  private:
+	boost::asio::io_service::strand &get_strand(size_t index)
+	{
+		index = index % Strand_.size();
+		return *Strand_[index];
+	}
+
+  private:
+	Server &server_;
+	std::vector<boost::shared_ptr<boost::asio::io_service>> WorkService_;
+	//使用work，即使没有异步io的情况下，也能保证io_service继续工作
+	std::vector<boost::shared_ptr<boost::asio::io_service::work>> Work_;
+	//使用strands最显著的好处就是简化我们的代码，因为通过strand来维护handler不需要显式地同步线程。
+	//strands保证同属于一个strand的两个handler不会同时执行(在两个线程同时执行)。
+	//如果你只使用一个IO线程（在Boost里面只有一个线程调用io_service::run），那么你不需要做任何的同步，此时已经是隐式的strand。
+	//但是如果你想提高性能，因此使用多个IO线程，那么你有两种选择，一种是在不同的handler进行显式的同步，另一种就是使用strand。
+	//使用strand将任务排序,即使在多线程情况下，我们也希望任务能按照post的次序执行
+	std::vector<boost::shared_ptr<boost::asio::io_service::strand>> Strand_;
+	std::vector<boost::shared_ptr<boost::thread>> WorkThread_;
+	//boost::thread_group WorkThreadGroup_;
+};
+template <class Server>
+class XIdleService
+{
+#if XSERVER_PROTOTYPE_TCP 
+typedef XWorker<Server> xworker_t; 
+typedef XWorker<Server> xconnector_t; 
+typedef std::shared_ptr<xworker_t> xworker_ptr; 
+typedef std::weak_ptr<xworker_t> xworker_weak_ptr; 
+typedef std::shared_ptr<xconnector_t> xconnector_ptr; 
+typedef std::weak_ptr<xconnector_t> xconnector_weak_ptr; 
+#endif 
+#if XSERVER_PROTOTYPE_HTTP 
+typedef detect_session<Server> detect_t; 
+typedef plain_http_session<Server> http_t; 
+typedef ssl_http_session<Server> https_t; 
+typedef std::shared_ptr<detect_t> detect_ptr; 
+typedef std::shared_ptr<http_t> http_ptr; 
+typedef std::weak_ptr<http_t> http_weak_ptr; 
+typedef std::shared_ptr<https_t> https_ptr; 
+typedef std::weak_ptr<https_t> https_weak_ptr; 
+#endif 
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE==XSERVER_WEBSOCKET 
+typedef plain_websocket_session<Server> ws_t; 
+typedef plain_websocket_client_session<Server> ws_clt_t; 
+typedef std::shared_ptr<ws_t> ws_ptr; 
+typedef std::weak_ptr<ws_t> ws_weak_ptr; 
+typedef std::shared_ptr<ws_clt_t> ws_clt_ptr; 
+typedef std::weak_ptr<ws_clt_t> ws_clt_weak_ptr; 
+#endif 
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE==XSERVER_SSL_WEBSOCKET 
+typedef ssl_websocket_session<Server> wss_t; 
+typedef ssl_websocket_client_session<Server> wss_clt_t; 
+typedef std::shared_ptr<wss_t> wss_ptr; 
+typedef std::weak_ptr<wss_t> wss_weak_ptr; 
+typedef std::shared_ptr<wss_clt_t> wss_clt_ptr; 
+typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr; 
+#endif
+  public:
+	XIdleService(Server &srv)
+		: server_(srv), service_(), service_work_(service_), timing_wheel_timer_(service_)
+	{
+	}
+
+	void start()
+	{
+#if XSERVER_PROTOTYPE_TCP
+		worker_wheel_list_.resize(server_.keepalive());
+		connector_wheel_list_.resize(server_.keepalive());
+#endif //
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+		ws_wheel_list_.resize(server_.keepalive());
+		ws_clt_wheel_list_.resize(server_.keepalive());
+#endif //
+		post_timing_wheel();
+		thread_ = boost::shared_ptr<boost::thread>(new boost::thread(
+			boost::bind(&boost::asio::io_service::run, &service_)));
+	}
+
+	void stop()
+	{
+		boost::system::error_code ec;
+		timing_wheel_timer_.cancel(ec);
+		service_.stop();
+		thread_->join();
+		thread_.reset();
+		service_.reset();
+#if XSERVER_PROTOTYPE_TCP
+		worker_wheel_list_.clear();
+		connector_wheel_list_.clear();
+#endif //
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+		ws_wheel_list_.clear();
+		ws_clt_wheel_list_.clear();
+#endif //
+	}
+
+#if XSERVER_PROTOTYPE_TCP
+
+	void add(xworker_ptr peer_ptr)
+	{
+		service_.post(boost::bind(&on_add_worker, this, peer_ptr));
+	}
+
+	void add(xconnector_ptr peer_ptr)
+	{
+		service_.post(boost::bind(&on_add_connector, this, peer_ptr));
+	}
+
+	void active(xworker_ptr peer_ptr)
+	{
+		service_.post(boost::bind(&on_active_worker, this, peer_ptr));
+	}
+
+	void active(xconnector_ptr peer_ptr)
+	{
+		service_.post(boost::bind(&on_active_connector, this, peer_ptr));
+	}
+
+#endif //
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+
+	void add(ws_ptr peer_ptr)
+	{
+		service_.post(boost::bind(&on_add_ws, this, peer_ptr));
+	}
+
+	void add(ws_clt_ptr peer_ptr)
+	{
+		service_.post(boost::bind(&on_add_ws_client, this, peer_ptr));
+	}
+
+	void active(ws_ptr peer_ptr)
+	{
+		service_.post(boost::bind(&on_active_ws, this, peer_ptr));
+	}
+
+	void active(ws_clt_ptr peer_ptr)
+	{
+		service_.post(boost::bind(&on_active_ws_client, this, peer_ptr));
+	}
+
+#endif //
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
+
+	void add(wss_ptr peer_ptr)
+	{
+		service_.post(boost::bind(&on_add_wss, this, peer_ptr));
+	}
+
+	void add(wss_clt_ptr peer_ptr)
+	{
+		service_.post(boost::bind(&on_add_wss_client, this, peer_ptr));
+	}
+
+	void active(wss_ptr peer_ptr)
+	{
+		/*service_.post(boost::bind(&on_active_wss
+		, this, peer_ptr));*/
+	}
+
+	void active(wss_clt_ptr peer_ptr)
+	{
+		service_.post(boost::bind(&on_active_wss_client, this, peer_ptr));
+	}
+
+#endif //
+
+	template <typename F>
+	void Post(F f)
+	{
+		service_.post(f);
+	}
+
+  private:
+  #if XSERVER_PROTOTYPE_TCP
+
+	void on_add_worker(xworker_ptr peer_ptr)
+	{
+		xworker_entry_ptr entry_ptr(new xworker_entry(peer_ptr));
+		worker_wheel_list_.back().insert(entry_ptr);
+		xworker_entry_weak_ptr entry_weak_ptr(entry_ptr);
+		peer_ptr->set_context(entry_weak_ptr);
+	}
+
+	void on_add_connector(xconnector_ptr peer_ptr)
+	{
+		xconnector_entry_ptr entry_ptr(new xconnector_entry(peer_ptr));
+		connector_wheel_list_.back().insert(entry_ptr);
+		xconnector_entry_weak_ptr entry_weak_ptr(entry_ptr);
+		peer_ptr->set_context(entry_weak_ptr);
+	}
+
+	void on_active_worker(xworker_ptr peer_ptr)
+	{
+		BOOST_ASSERT(!peer_ptr->context().empty());
+		xworker_entry_weak_ptr entry_weak_ptr(boost::any_cast<xworker_entry_weak_ptr>(peer_ptr->context()));
+		xworker_entry_ptr entry_ptr(entry_weak_ptr.lock());
+		if (entry_ptr)
+		{
+			worker_wheel_list_.back().insert(entry_ptr);
+		}
+	}
+
+	void on_active_connector(xconnector_ptr peer_ptr)
+	{
+		BOOST_ASSERT(!peer_ptr->context().empty());
+		xconnector_entry_weak_ptr entry_weak_ptr(boost::any_cast<xconnector_entry_weak_ptr>(peer_ptr->context()));
+		xconnector_entry_ptr entry_ptr(entry_weak_ptr.lock());
+		if (entry_ptr)
+		{
+			connector_wheel_list_.back().insert(entry_ptr);
+		}
+	}
+
+#endif //
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+
+	void on_add_ws(ws_ptr peer_ptr)
+	{
+		ws_entry_ptr entry_ptr(new ws_entry(peer_ptr));
+		ws_wheel_list_.back().insert(entry_ptr);
+		ws_entry_weak_ptr entry_weak_ptr(entry_ptr);
+		peer_ptr->set_context(entry_weak_ptr);
+	}
+
+	void on_add_ws_client(ws_clt_ptr peer_ptr)
+	{
+		ws_clt_entry_ptr entry_ptr(new ws_clt_entry(peer_ptr));
+		ws_clt_wheel_list_.back().insert(entry_ptr);
+		ws_clt_entry_weak_ptr entry_weak_ptr(entry_ptr);
+		peer_ptr->set_context(entry_weak_ptr);
+	}
+
+	void on_active_ws(ws_ptr peer_ptr)
+	{
+		BOOST_ASSERT(!peer_ptr->context().empty());
+		ws_entry_weak_ptr entry_weak_ptr(boost::any_cast<ws_entry_weak_ptr>(peer_ptr->context()));
+		ws_entry_ptr entry_ptr(entry_weak_ptr.lock());
+		if (entry_ptr)
+		{
+			ws_wheel_list_.back().insert(entry_ptr);
+		}
+	}
+
+	void on_active_ws_client(ws_clt_ptr peer_ptr)
+	{
+		BOOST_ASSERT(!peer_ptr->context().empty());
+		ws_clt_entry_weak_ptr entry_weak_ptr(boost::any_cast<ws_clt_entry_weak_ptr>(peer_ptr->context()));
+		ws_clt_entry_ptr entry_ptr(entry_weak_ptr.lock());
+		if (entry_ptr)
+		{
+			ws_clt_wheel_list_.back().insert(entry_ptr);
+		}
+	}
+
+#endif //
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
+
+	void on_add_wss(wss_ptr peer_ptr)
+	{
+		/*ws_entry_ptr entry_ptr(new ws_entry(peer_ptr));
+	ws_wheel_list_.back().insert(entry_ptr);
+	ws_entry_weak_ptr entry_weak_ptr(entry_ptr);
+	peer_ptr->set_context(entry_weak_ptr);*/
+	}
+
+	void on_add_wss_client(wss_clt_ptr peer_ptr)
+	{
+		/*ws_clt_entry_ptr entry_ptr(new ws_clt_entry(peer_ptr));
+	ws_clt_wheel_list_.back().insert(entry_ptr);
+	ws_clt_entry_weak_ptr entry_weak_ptr(entry_ptr);
+	peer_ptr->set_context(entry_weak_ptr);*/
+	}
+
+	void on_active_wss(wss_ptr peer_ptr)
+	{
+		/*BOOST_ASSERT(!peer_ptr->context().empty());
+	ws_entry_weak_ptr entry_weak_ptr(boost::any_cast<ws_entry_weak_ptr>(peer_ptr->context()));
+	ws_entry_ptr entry_ptr(entry_weak_ptr.lock());
+	if (entry_ptr) {
+		ws_wheel_list_.back().insert(entry_ptr);
+	}*/
+	}
+
+	void on_active_wss_client(wss_clt_ptr peer_ptr)
+	{
+		/*BOOST_ASSERT(!peer_ptr->context().empty());
+	ws_clt_entry_weak_ptr entry_weak_ptr(boost::any_cast<ws_clt_entry_weak_ptr>(peer_ptr->context()));
+	ws_clt_entry_ptr entry_ptr(entry_weak_ptr.lock());
+	if (entry_ptr) {
+		ws_clt_wheel_list_.back().insert(entry_ptr);
+	}*/
+	}
+
+#endif //
+
+	void post_timing_wheel()
+	{
+		boost::system::error_code ec;
+		timing_wheel_timer_.cancel(ec);
+		timing_wheel_timer_.expires_from_now(boost::posix_time::seconds(1));
+		timing_wheel_timer_.async_wait(boost::bind(&on_timing_wheel, this, boost::asio::placeholders::error));
+	}
+
+	void on_timing_wheel(const boost::system::error_code &ec)
+	{
+		if (!ec)
+		{
+#if XSERVER_PROTOTYPE_TCP
+			worker_wheel_list_.push_back(xworker_entry_bucket());
+			BOOST_ASSERT(worker_wheel_list_.size() == server_.keepalive());
+			connector_wheel_list_.push_back(xconnector_entry_bucket());
+#endif //
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+			ws_wheel_list_.push_back(ws_entry_bucket());
+			BOOST_ASSERT(ws_wheel_list_.size() == server_.keepalive());
+			ws_clt_wheel_list_.push_back(ws_clt_entry_bucket());
+#endif // 
+	   //ping middle of wheel
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+			ws_entry_bucket &ws_list = ws_wheel_list_[ws_wheel_list_.size() / 2];
+			for (typename ws_entry_bucket::iterator it = ws_list.begin(); it != ws_list.end(); ++it)
+			{
+				(*it)->ping();
+			}
+			ws_clt_entry_bucket &ws_clt_list = ws_clt_wheel_list_[ws_clt_wheel_list_.size() / 2];
+			for (typename ws_clt_entry_bucket::iterator it = ws_clt_list.begin(); it != ws_clt_list.end(); ++it)
+			{
+				(*it)->ping();
+			}
+#endif //
+		}
+		post_timing_wheel();
+	}
+
+  private:
+	Server &server_;
+	boost::asio::io_service service_;
+	//使用work，即使没有异步io的情况下，也能保证io_service继续工作
+	boost::asio::io_service::work service_work_;
+	boost::shared_ptr<boost::thread> thread_;
+	boost::asio::deadline_timer timing_wheel_timer_;
+	//
+	template <class entry>
+	struct x_idle_entry : private boost::noncopyable
+	{
+	  public:
+		explicit x_idle_entry(const std::weak_ptr<entry> &entry_ptr)
+			: entry_ptr_(entry_ptr)
+		{
+		}
+
+		~x_idle_entry()
+		{
+			std::shared_ptr<entry> entry_ptr = entry_ptr_.lock();
+			if (entry_ptr)
+			{
+				LOG4I("XPeer%d) HAS BEEN KICKED", entry_ptr->id());
+				entry_ptr->close();
+			}
+		}
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET || XSERVER_PROTOTYPE_SSL_WEBSOCKET
+		void ping()
+		{
+			std::shared_ptr<entry> entry_ptr = entry_ptr_.lock();
+			if (entry_ptr)
+			{
+				LOG4I("XPeer%d) PING...", entry_ptr->id());
+				entry_ptr->ping();
+			}
+		}
+#endif //
+	  private:
+		std::weak_ptr<entry> entry_ptr_;
+	};
+#if XSERVER_PROTOTYPE_TCP
+	typedef x_idle_entry<xworker_t> xworker_entry;
+	typedef std::shared_ptr<xworker_entry> xworker_entry_ptr;
+	typedef std::weak_ptr<xworker_entry> xworker_entry_weak_ptr;
+	typedef boost::unordered_set<xworker_entry_ptr> xworker_entry_bucket;
+	typedef boost::circular_buffer<xworker_entry_bucket> xworker_entry_bucket_list;
+	xworker_entry_bucket_list worker_wheel_list_;
+	typedef x_idle_entry<xconnector_t> xconnector_entry;
+	typedef std::shared_ptr<xconnector_entry> xconnector_entry_ptr;
+	typedef std::weak_ptr<xconnector_entry> xconnector_entry_weak_ptr;
+	typedef boost::unordered_set<xconnector_entry_ptr> xconnector_entry_bucket;
+	typedef boost::circular_buffer<xconnector_entry_bucket> xconnector_entry_bucket_list;
+	xconnector_entry_bucket_list connector_wheel_list_;
+#endif //
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+	typedef x_idle_entry<ws_t> ws_entry;
+	typedef std::shared_ptr<ws_entry> ws_entry_ptr;
+	typedef std::weak_ptr<ws_entry> ws_entry_weak_ptr;
+	typedef boost::unordered_set<ws_entry_ptr> ws_entry_bucket;
+	typedef boost::circular_buffer<ws_entry_bucket> ws_entry_bucket_list;
+	ws_entry_bucket_list ws_wheel_list_;
+	typedef x_idle_entry<ws_clt_t> ws_clt_entry;
+	typedef std::shared_ptr<ws_clt_entry> ws_clt_entry_ptr;
+	typedef std::weak_ptr<ws_clt_entry> ws_clt_entry_weak_ptr;
+	typedef boost::unordered_set<ws_clt_entry_ptr> ws_clt_entry_bucket;
+	typedef boost::circular_buffer<ws_clt_entry_bucket> ws_clt_entry_bucket_list;
+	ws_clt_entry_bucket_list ws_clt_wheel_list_;
+#endif //
+};
+
+template <class T>
+class XServerT : private boost::noncopyable
+{
+#if XSERVER_PROTOTYPE_TCP 
+typedef XWorker<T> xworker_t; 
+typedef XWorker<T> xconnector_t; 
+typedef std::shared_ptr<xworker_t> xworker_ptr; 
+typedef std::weak_ptr<xworker_t> xworker_weak_ptr; 
+typedef std::shared_ptr<xconnector_t> xconnector_ptr; 
+typedef std::weak_ptr<xconnector_t> xconnector_weak_ptr; 
+#endif 
+#if XSERVER_PROTOTYPE_HTTP 
+typedef detect_session<T> detect_t; 
+typedef plain_http_session<T> http_t; 
+typedef ssl_http_session<T> https_t; 
+typedef std::shared_ptr<detect_t> detect_ptr; 
+typedef std::shared_ptr<http_t> http_ptr; 
+typedef std::weak_ptr<http_t> http_weak_ptr; 
+typedef std::shared_ptr<https_t> https_ptr; 
+typedef std::weak_ptr<https_t> https_weak_ptr; 
+#endif 
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE==XSERVER_WEBSOCKET 
+typedef plain_websocket_session<T> ws_t; 
+typedef plain_websocket_client_session<T> ws_clt_t; 
+typedef std::shared_ptr<ws_t> ws_ptr; 
+typedef std::weak_ptr<ws_t> ws_weak_ptr; 
+typedef std::shared_ptr<ws_clt_t> ws_clt_ptr; 
+typedef std::weak_ptr<ws_clt_t> ws_clt_weak_ptr; 
+#endif 
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE==XSERVER_SSL_WEBSOCKET 
+typedef ssl_websocket_session<T> wss_t; 
+typedef ssl_websocket_client_session<T> wss_clt_t; 
+typedef std::shared_ptr<wss_t> wss_ptr; 
+typedef std::weak_ptr<wss_t> wss_weak_ptr; 
+typedef std::shared_ptr<wss_clt_t> wss_clt_ptr; 
+typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr; 
+#endif
+  public:
+	XServerT()
+		: keepalive_(60), max_buffer_size_(4096), log_directory_("./log/"), ssl_directory_("./"), root_directory_("./www/"), io_thread_num_(0), work_thread_num_(0), io_service_(), io_ssl_context_(boost::asio::ssl::context::sslv23), work_service_(), idle_service_(), stop_flag_(true), peer_id_(0)
+	{
+	}
+
+	~XServerT()
+	{
+	}
+
+	bool start(int io_thread, int work_thread)
+	{
+		bool expected = true;
+		if (!stop_flag_.compare_exchange_strong(expected, false))
+		{
+			return true;
+		}
+
+		T* pT = static_cast<T*>(this);
+
+		boost::system::error_code ec;
+
+		io_thread_num_ = io_thread + 1;
+		work_thread_num_ = work_thread;
+		peer_id_ = std::max(io_thread_num_, work_thread_num_);
+
+		//size_t i;
+
+		srand((unsigned int)time(0));
+
+		io_service_ = std::make_shared<XIOService<T>>(*static_cast<T*>(this));
+		work_service_ = std::make_shared<XWorkService<T>>(*static_cast<T*>(this));
+		idle_service_ = std::make_shared<XIdleService<T>>(*static_cast<T*>(this));
+
+		std::string logfile = log_directory_ + "/xserver";
+		XLogger::instance().init(logfile);
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
+
+		// This holds the self-signed certificate used by the server
+		pT->load_server_certificate(io_ssl_context_);
+		
+#endif //
+
+		LOG4I("XSERVER t=%d v=%s", XSERVER_PROTOTYPE, XSERVER_VERSION);
+		LOG4I("XSERVER starting io_thread=%d work_thread=%d", io_thread, work_thread);
+
+		idle_service_->start();
+
+		io_service_->Start(io_thread_num_);
+
+		work_service_->Start(work_thread_num_);
+
+		LOG4I("XSERVER started");
+
+		return true;
+	}
+
+	void stop()
+	{
+		bool expected = false;
+		if (!stop_flag_.compare_exchange_strong(expected, true))
+		{
+			return;
+		}
+
+		//size_t i;
+		boost::system::error_code ec;
+
+		LOG4I(" stoping");
+
+		//acceptor_.reset();
+
+		work_service_->Stop();
+
+		io_service_->Stop();
+
+		idle_service_->stop();
+
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			peer_map_.clear();
+			//lock.unlock();
+		}
+
+		idle_service_.reset();
+		work_service_.reset();
+		io_service_.reset();
+		
+		LOG4I("XSERVER stoped");
+	}
+
+	inline bool is_run() { return !stop_flag_; }
+
+	inline void set_keepalive(size_t val) { keepalive_ = val; }
+	inline const size_t& keepalive() { return keepalive_; }
+
+	inline void set_max_buffer_size(size_t val) { max_buffer_size_ = val; }
+	inline const size_t& max_buffer_size() { return max_buffer_size_; }
+
+	inline void set_log_directory(const std::string& val) { log_directory_ = val; }
+	inline const std::string& log_directory() { return log_directory_; }
+
+	inline void set_ssl_directory(const std::string& val) { ssl_directory_ = val; }
+	inline const std::string& ssl_directory() { return ssl_directory_; }
+
+	inline void set_root_directory(const std::string& val) { root_directory_ = val; }
+	inline const std::string& root_directory() { return root_directory_; }
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
+	void load_server_certificate(boost::asio::ssl::context& ctx)
+	{
+		//
+	}
+#endif
+
+	void on_io_init(const size_t peer)
+	{
+		LOG4I("XSERVER on_io_init %d", peer);
+	}
+
+	void on_io_term(const size_t peer)
+	{
+		LOG4I(" on_io_term %d", peer);
+	}
+
+	template <typename F>
+	inline void PostIO(size_t peer, F f)
+	{
+		io_service_->Post(get_io_index(PEER_ID(peer)), f);
+	}
+	inline boost::asio::deadline_timer *CreateIOTimer(size_t peer)
+	{
+		return io_service_->CreateTimer(get_io_index(PEER_ID(peer)));
+	}
+	template <typename F>
+	inline void PostIOTimer(boost::asio::deadline_timer *timer_ptr, size_t millis, F f)
+	{
+		io_service_->PostTimer(timer_ptr, millis, f);
+	}
+	inline void KillIOTimer(boost::asio::deadline_timer *timer_ptr)
+	{
+		io_service_->KillTimer(timer_ptr);
+	}
+
+	void on_work_init(const size_t peer)
+	{
+		LOG4I("XSERVER on_work_init %d", peer);
+	}
+
+	void on_work_term(const size_t peer)
+	{
+		LOG4I("XSERVER on_work_term %d", peer);
+	}
+
+	template <typename F>
+	inline void PostWork(size_t peer, F f)
+	{
+		work_service_->Post(get_work_index(PEER_ID(peer)), f);
+	}
+	inline boost::asio::deadline_timer *CreateWorkTimer(size_t peer)
+	{
+		return work_service_->CreateTimer(get_io_index(PEER_ID(peer)));
+	}
+	template <typename F>
+	inline void PostWorkTimer(boost::asio::deadline_timer *timer_ptr, size_t millis, F f)
+	{
+		work_service_->PostTimer(timer_ptr, millis, f);
+	}
+	inline void KillWorkTimer(boost::asio::deadline_timer *timer_ptr)
+	{
+		work_service_->KillTimer(timer_ptr);
+	}
+
+	template <typename F>
+	inline void PostIdle(F f)
+	{
+		idle_service_->Post(f);
+	}
+
+	size_t connect(const x_char_t *addr, const x_ushort_t port, const x_int_t type, const x_size_t io_channel, const x_size_t work_channel)
+	{
+		if (!is_run())
+		{
+			return 0;
+		}
+
+		LOG4I("XSERVER connecting addr=%s port=%d type=%d", addr, port, type);
+
+		size_t peer_id = 0;
+		if (io_channel != (x_size_t)-1)
+		{
+			peer_id = new_io_channel_peer_id(io_channel);
+		}
+		else
+		{
+			if (work_thread_num_)
+			{
+				if (work_channel != (x_size_t)-1)
+				{
+					peer_id = new_work_channel_peer_id(work_channel);
+				}
+			}
+		}
+		if (peer_id == 0)
+		{
+			peer_id = new_peer_id();
+		}
+		boost::asio::ip::tcp::socket socket(io_service_->get_service(get_io_index(peer_id)));
+		switch (type)
+		{
+#if XSERVER_PROTOTYPE_TCP
+		case XSERVER_TCP:
+		{
+			xconnector_ptr peer_ptr = std::make_shared<xconnector_t>(*static_cast<T*>(this), peer_id, std::move(socket));
+			peer_ptr->run(addr, tostr<x_ushort_t>(port));
+			return peer_ptr->id();
+		}
+		break;
+#endif //
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+		case XSERVER_WEBSOCKET:
+		{
+			ws_clt_ptr peer_ptr = std::make_shared<ws_clt_t>(*static_cast<T*>(this), peer_id, std::move(socket));
+			peer_ptr->run(addr, tostr<x_ushort_t>(port));
+			return peer_ptr->id();
+		}
+		break;
+#endif //
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
+		case XSERVER_SSL_WEBSOCKET:
+		{
+			wss_clt_ptr peer_ptr = std::make_shared<wss_clt_t>(*static_cast<T*>(this), peer_id, std::move(socket), io_ssl_context_);
+			peer_ptr->run(addr, tostr<x_ushort_t>(port));
+			return peer_ptr->id();
+		}
+		break;
+#endif //
+		default:
+			break;
+		}
+		BOOST_ASSERT(false);
+		return 0;
+	}
+
+	bool listen(const x_ushort_t port, const x_int_t type)
+	{
+		if (!is_run())
+		{
+			return false;
+		}
+
+		LOG4I("XSERVER listen port=%d type=%d", port, type);
+
+		boost::system::error_code ec;
+		boost::asio::ip::tcp::endpoint ep(boost::asio::ip::tcp::v4(), port);
+		std::shared_ptr<boost::asio::ip::tcp::acceptor> acceptor = std::make_shared<boost::asio::ip::tcp::acceptor>(io_service_->get_service(get_accept_index()));
+		acceptor->open(ep.protocol());
+		acceptor->set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
+		acceptor->bind(ep);
+		acceptor->listen(boost::asio::socket_base::max_listen_connections, ec);
+		post_accept(acceptor, type);
+		return true;
+	}
+
+	void close(const size_t peer)
+	{
+		if (!is_run())
+		{
+			return;
+		}
+
+		LOG4I("XServer CLOSE PEER(%d,%d)", PEER_TYPE(peer), PEER_ID(peer));
+
+		boost::shared_lock<boost::shared_mutex> lock(peer_mutex_);
+		boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer);
+		if (it != peer_map_.end())
+		{
+			if (0)
+			{
+				//
+			}
+#if XSERVER_PROTOTYPE_WEBSOCKET
+			else if (PEER_TYPE(peer) == PEER_TYPE_WEBSOCKET_CLIENT)
+			{
+				ws_clt_ptr peer_ptr;
+				{
+					ws_clt_weak_ptr peer_weak_ptr = boost::any_cast<ws_clt_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					peer_ptr->close();
+				}
+			}
+#elif XSERVER_PROTOTYPE_SSL_WEBSOCKET
+			else if (PEER_TYPE(peer) == PEER_TYPE_SSL_WEBSOCKET_CLIENT)
+			{
+				wss_clt_ptr peer_ptr;
+				{
+					wss_clt_weak_ptr peer_weak_ptr = boost::any_cast<wss_clt_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					peer_ptr->close();
+				}
+			}
+#endif //
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+			else if (PEER_TYPE(peer) == PEER_TYPE_WEBSOCKET)
+			{
+				ws_ptr peer_ptr;
+				{
+					ws_weak_ptr peer_weak_ptr = boost::any_cast<ws_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					peer_ptr->close();
+				}
+			}
+#elif XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
+			else if (PEER_TYPE(peer) == PEER_TYPE_SSL_WEBSOCKET)
+			{
+				wss_ptr peer_ptr;
+				{
+					wss_weak_ptr peer_weak_ptr = boost::any_cast<wss_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					peer_ptr->close();
+				}
+			}
+#else
+			else if (PEER_TYPE(peer) == PEER_TYPE_TCP_CLIENT)
+			{
+				xconnector_ptr peer_ptr;
+				{
+					xconnector_weak_ptr peer_weak_ptr = boost::any_cast<xconnector_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					peer_ptr->close();
+				}
+			}
+			else if (PEER_TYPE(peer) == PEER_TYPE_TCP)
+			{
+				xworker_ptr peer_ptr;
+				{
+					xworker_weak_ptr peer_weak_ptr = boost::any_cast<xworker_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					peer_ptr->close();
+				}
+			}
+#endif //
+			else
+			{
+			}
+			peer_map_.erase(it);
+		}
+	}
+
+	bool post_packet(const size_t peer, const char *buf, const size_t len)
+	{
+		if (!is_run())
+		{
+			return false;
+		}
+		bool rlt = false;
+		boost::shared_lock<boost::shared_mutex> lock(peer_mutex_);
+		boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer);
+		if (it != peer_map_.end())
+		{
+			size_t peer_type = PEER_TYPE(peer);
+			switch (peer_type)
+			{
+#if XSERVER_PROTOTYPE_WEBSOCKET
+			case PEER_TYPE_WEBSOCKET_CLIENT:
+			{
+				ws_clt_ptr peer_ptr;
+				{
+					ws_clt_weak_ptr peer_weak_ptr = boost::any_cast<ws_clt_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					if (peer_ptr->is_open())
+					{
+						peer_ptr->do_write(buf, len);
+						rlt = true;
+					}
+				}
+			}
+			break;
+#endif //
+#if XSERVER_PROTOTYPE_SSL_WEBSOCKET
+			case PEER_TYPE_SSL_WEBSOCKET_CLIENT:
+			{
+				wss_clt_ptr peer_ptr;
+				{
+					wss_clt_weak_ptr peer_weak_ptr = boost::any_cast<wss_clt_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					if (peer_ptr->is_open())
+					{
+						peer_ptr->do_write(buf, len);
+						rlt = true;
+					}
+				}
+			}
+			break;
+#endif //
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+			case PEER_TYPE_WEBSOCKET:
+			{
+				ws_ptr peer_ptr;
+				{
+					ws_weak_ptr peer_weak_ptr = boost::any_cast<ws_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					if (peer_ptr->is_open())
+					{
+						peer_ptr->do_write(buf, len);
+						rlt = true;
+					}
+				}
+			}
+			break;
+#endif //
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
+			case PEER_TYPE_SSL_WEBSOCKET:
+			{
+				wss_ptr peer_ptr;
+				{
+					wss_weak_ptr peer_weak_ptr = boost::any_cast<wss_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					if (peer_ptr->is_open())
+					{
+						peer_ptr->do_write(buf, len);
+						rlt = true;
+					}
+				}
+			}
+			break;
+#endif //
+#if XSERVER_PROTOTYPE_TCP
+			case PEER_TYPE_TCP_CLIENT:
+			{
+				xconnector_ptr peer_ptr;
+				{
+					xconnector_weak_ptr peer_weak_ptr = boost::any_cast<xconnector_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					if (peer_ptr->is_open())
+					{
+						peer_ptr->do_write(buf, len);
+						rlt = true;
+					}
+				}
+			}
+			break;
+			case PEER_TYPE_TCP:
+			{
+				xworker_ptr peer_ptr;
+				{
+					xworker_weak_ptr peer_weak_ptr = boost::any_cast<xworker_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					if (peer_ptr->is_open())
+					{
+						peer_ptr->do_write(buf, len);
+						rlt = true;
+					}
+				}
+			}
+			break;
+#endif //
+			default:
+			{
+			}
+			break;
+			}
+		}
+		return rlt;
+	}
+	//void broadcast(const char* buf, const size_t len);
+
+#if XSERVER_PROTOTYPE_TCP
+	//int parse_buffer(xworker_ptr peer_ptr, const char* buf, const size_t len);
+	//int parse_buffer(xconnector_ptr peer_ptr, const char* buf, const size_t len);
+
+	void on_io_accept(xworker_ptr peer_ptr)
+	{
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			peer_map_[peer_ptr->id()] = xworker_weak_ptr(peer_ptr);
+			//lock.unlock();
+		}
+		idle_service_->add(peer_ptr);
+	}
+
+	void on_io_connect(xconnector_ptr peer_ptr)
+	{
+		// 	if (err && err[0]) {
+		// 		handler_->handle_io_connect(peer_ptr->id(), XSERVER_TCP, err);
+		// 	}
+		// 	else {
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			peer_map_[peer_ptr->id()] = xconnector_weak_ptr(peer_ptr);
+			//lock.unlock();
+		}
+		idle_service_->add(peer_ptr);
+		//	}
+	}
+
+	void on_io_read(xworker_ptr peer_ptr, XRWBuffer &buffer)
+	{
+		idle_service_->active(peer_ptr);
+		buffer.clear();
+		peer_ptr->do_read();
+	}
+
+	void on_io_write(xworker_ptr peer_ptr, XRWBuffer &buffer)
+	{
+		
+	}
+
+	void on_close(xworker_t *peer_ptr)
+	{
+		bool bfind = false;
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
+			if (it != peer_map_.end())
+			{
+				bfind = true;
+				peer_map_.erase(it);
+				lock.unlock();
+			}
+			//lock.unlock();
+		}
+		//if (bfind) {
+		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		//}
+	}
+
+	void on_io_read(xconnector_ptr peer_ptr, XRWBuffer &buffer)
+	{
+		idle_service_->active(peer_ptr);
+		buffer.clear();
+		peer_ptr->do_read();
+	}
+
+	void on_io_write(xconnector_ptr peer_ptr, XRWBuffer &buffer)
+	{
+		
+	}
+
+	void on_close(xconnector_t *peer_ptr)
+	{
+		bool bfind = false;
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
+			if (it != peer_map_.end())
+			{
+				bfind = true;
+				peer_map_.erase(it);
+				lock.unlock();
+			}
+			//lock.unlock();
+		}
+		//if (bfind) {
+		LOG4I("XConnector(%d) HAS BEEN CLOSED", peer_ptr->id());
+		//}
+	}
+#endif //
+
+#if XSERVER_PROTOTYPE_HTTP
+	//detect_ptr检测完成之后会变成http_ptr或https_ptr
+	//http_ptr和https_ptr分别可以升级为ws_ptr和wss_ptr
+	void on_io_accept(detect_ptr peer_ptr, const x_int_t type)
+	{
+		
+	}
+
+	void on_io_accept(http_ptr peer_ptr)
+	{
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			peer_map_[peer_ptr->id()] = http_weak_ptr(peer_ptr);
+			//lock.unlock();
+		}
+		//
+	}
+
+	void on_io_accept(https_ptr peer_ptr)
+	{
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			peer_map_[peer_ptr->id()] = https_weak_ptr(peer_ptr);
+			//lock.unlock();
+		}
+		//
+	}
+
+	void on_io_upgrade(ws_ptr peer_ptr)
+	{
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			peer_map_.erase(MAKE_PEER_ID(PEER_TYPE_HTTP, peer_ptr->id()));
+			peer_map_[peer_ptr->id()] = ws_weak_ptr(peer_ptr);
+			//lock.unlock();
+		}
+		idle_service_->add(peer_ptr);
+	}
+
+	void on_io_upgrade(wss_ptr peer_ptr)
+	{
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			peer_map_.erase(MAKE_PEER_ID(PEER_TYPE_HTTPS, peer_ptr->id()));
+			peer_map_[peer_ptr->id()] = wss_weak_ptr(peer_ptr);
+			//lock.unlock();
+		}
+		idle_service_->add(peer_ptr);
+	}
+#endif //
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+	void on_io_accept(ws_ptr peer_ptr)
+	{
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			peer_map_[peer_ptr->id()] = ws_weak_ptr(peer_ptr);
+			//lock.unlock();
+		}
+		idle_service_->add(peer_ptr);
+	}
+
+	void on_io_connect(ws_clt_ptr peer_ptr)
+	{
+		// 	if (err && err[0]) {
+		// 		handler_->handle_io_connect(peer_ptr->id(), XSERVER_WEBSOCKET, err);
+		// 	}
+		// 	else {
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			peer_map_[peer_ptr->id()] = ws_clt_weak_ptr(peer_ptr);
+			//lock.unlock();
+		}
+		idle_service_->add(peer_ptr);
+		//	}
+	}
+#endif //
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
+
+	void on_io_accept(wss_ptr peer_ptr)
+	{
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			peer_map_[peer_ptr->id()] = wss_weak_ptr(peer_ptr);
+			//lock.unlock();
+		}
+		idle_service_->add(peer_ptr);
+	}
+
+	void on_io_connect(wss_clt_ptr peer_ptr)
+	{
+		// 	if (err && err[0]) {
+		// 		handler_->handle_io_connect(peer_ptr->id(), XSERVER_SSL_WEBSOCKET, err);
+		// 	}
+		// 	else {
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			peer_map_[peer_ptr->id()] = wss_clt_weak_ptr(peer_ptr);
+			//lock.unlock();
+		}
+		idle_service_->add(peer_ptr);
+		//	}
+	}
+
+#endif //
+
+#if XSERVER_PROTOTYPE_HTTP
+	// This function produces an HTTP response for the given
+	// request. The type of the response object depends on the
+	// contents of the request, so the interface requires the
+	// caller to pass a generic lambda for receiving the response.
+	template <class Body, class Allocator,
+			  class Send>
+	void
+	on_io_read(http_ptr peer_ptr,
+			   boost::beast::string_view doc_root,
+			   boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req,
+			   Send &&send)
+	{
+	}
+	template <class Body, class Allocator,
+			  class Send>
+	void
+	on_io_read(https_ptr peer_ptr,
+			   boost::beast::string_view doc_root,
+			   boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req,
+			   Send &&send)
+	{
+	}
+
+	void on_close(http_t *peer_ptr)
+	{
+		bool bfind = false;
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
+			if (it != peer_map_.end())
+			{
+				bfind = true;
+				peer_map_.erase(it);
+				lock.unlock();
+			}
+			//lock.unlock();
+		}
+		//if (bfind) {
+		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		//}
+	}
+
+	void on_close(https_t *peer_ptr)
+	{
+		bool bfind = false;
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
+			if (it != peer_map_.end())
+			{
+				bfind = true;
+				peer_map_.erase(it);
+				lock.unlock();
+			}
+			//lock.unlock();
+		}
+		//if (bfind) {
+		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		//}
+	}
+
+#endif //
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+
+	void on_io_activity(ws_ptr peer_ptr)
+	{
+		if (!is_run())
+		{
+			return;
+		}
+		idle_service_->active(peer_ptr);
+	}
+
+	void on_io_read(ws_ptr peer_ptr, const std::string &buffer)
+	{
+		peer_ptr->do_read();
+	}
+
+	void on_io_write(ws_ptr peer_ptr, const std::string &buffer)
+	{
+		idle_service_->active(peer_ptr);
+	}
+
+	void on_close(ws_t *peer_ptr)
+	{
+		bool bfind = false;
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
+			if (it != peer_map_.end())
+			{
+				bfind = true;
+				peer_map_.erase(it);
+				lock.unlock();
+			}
+			//lock.unlock();
+		}
+		//if (bfind) {
+		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		//}
+	}
+
+	void on_io_activity(ws_clt_ptr peer_ptr)
+	{
+		idle_service_->active(peer_ptr);
+	}
+
+	void on_io_read(ws_clt_ptr peer_ptr, const std::string &buffer)
+	{
+		peer_ptr->do_read();
+	}
+
+	void on_io_write(ws_clt_ptr peer_ptr, const std::string &buffer)
+	{
+		idle_service_->active(peer_ptr);
+	}
+
+	void on_close(ws_clt_t *peer_ptr)
+	{
+		bool bfind = false;
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
+			if (it != peer_map_.end())
+			{
+				bfind = true;
+				peer_map_.erase(it);
+				lock.unlock();
+			}
+			//lock.unlock();
+		}
+		//if (bfind) {
+		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		//}
+	}
+
+#endif //
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
+
+	void on_io_activity(wss_ptr peer_ptr)
+	{
+		idle_service_->active(peer_ptr);
+	}
+
+	void on_io_read(wss_ptr peer_ptr, const std::string &buffer)
+	{
+		peer_ptr->do_read();
+	}
+
+	void on_io_write(wss_ptr peer_ptr, const std::string &buffer)
+	{
+		idle_service_->active(peer_ptr);
+	}
+
+	void on_close(wss_t *peer_ptr)
+	{
+		bool bfind = false;
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
+			if (it != peer_map_.end())
+			{
+				bfind = true;
+				peer_map_.erase(it);
+				lock.unlock();
+			}
+			//lock.unlock();
+		}
+		//if (bfind) {
+		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		//}
+	}
+
+	void on_io_activity(wss_clt_ptr peer_ptr)
+	{
+		idle_service_->active(peer_ptr);
+	}
+
+	void on_io_read(wss_clt_ptr peer_ptr, const std::string &buffer)
+	{
+		peer_ptr->do_read();
+	}
+
+	void on_io_write(wss_clt_ptr peer_ptr, const std::string &buffer)
+	{
+		idle_service_->active(peer_ptr);
+	}
+
+	void on_close(wss_clt_t *peer_ptr)
+	{
+		bool bfind = false;
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
+			if (it != peer_map_.end())
+			{
+				bfind = true;
+				peer_map_.erase(it);
+				lock.unlock();
+			}
+			//lock.unlock();
+		}
+		//if (bfind) {
+		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		//}
+	}
+
+#endif //
+
+  protected:
+	size_t new_peer_id()
+	{
+		//它们对比变量的值和期待的值是否一致，
+		//如果是，则替换为用户指定的一个新的数值。
+		//如果不是，则将变量的值和期待的值交换。
+		size_t expected = PEER_ID_MASK; //PEER_ID_MASK==MAX_PEER_ID
+		peer_id_.compare_exchange_weak(expected, std::max(io_thread_num_, work_thread_num_));
+#ifdef _DEBUG
+		size_t id = peer_id_;
+		id = MAKE_PEER_ID(XSERVER_WEBSOCKET, id);
+		size_t peer_type = PEER_TYPE(id);
+		size_t peer_id = PEER_ID(id);
+#endif //
+		return peer_id_++;
+	}
+
+	size_t new_io_channel_peer_id(size_t channel)
+	{
+		channel %= (io_thread_num_ - 1);
+		size_t peer_id = new_peer_id();
+		//0是用于accept服务
+		while (peer_id % (io_thread_num_ - 1) != channel)
+			;
+		return peer_id;
+	}
+
+	size_t new_work_channel_peer_id(size_t channel)
+	{
+		channel %= (work_thread_num_);
+		size_t peer_id = new_peer_id();
+		while (peer_id % (work_thread_num_) != channel)
+			;
+		return peer_id;
+	}
+
+	size_t get_accept_index()
+	{
+		return 0;
+	}
+
+	size_t get_io_index(size_t id)
+	{
+		BOOST_ASSERT(PEER_TYPE(id) == 0);
+		//0是用于accept服务
+		//size_t index = 1 + rand() % (io_service_->size()-1);
+		return 1 + id % (io_thread_num_ - 1);
+	}
+
+	size_t get_work_index(size_t id)
+	{
+		BOOST_ASSERT(PEER_TYPE(id) == 0);
+		return id % work_thread_num_;
+	}
+
+	void post_accept(const std::shared_ptr<boost::asio::ip::tcp::acceptor> &acceptor, const x_int_t type)
+	{
+		if (!is_run())
+		{
+			return;
+		}
+		size_t peer_id = new_peer_id();
+		//acceptor->async_accept(io_service_->get_socket(get_io_index(peer_id), peer_id),
+		//	boost::bind(&on_accept, static_cast<T*>(this), boost::asio::placeholders::error, acceptor)
+		//	);
+		std::shared_ptr<boost::asio::ip::tcp::socket> socket = 
+			std::make_shared<boost::asio::ip::tcp::socket>(io_service_->get_service(get_io_index(peer_id)));
+		acceptor->async_accept(*socket, boost::bind(&on_accept, static_cast<T*>(this), boost::asio::placeholders::error, acceptor, type, socket, peer_id));
+	}
+
+	void on_accept(const boost::system::error_code &ec, const std::shared_ptr<boost::asio::ip::tcp::acceptor> &acceptor, const x_int_t type, const std::shared_ptr<boost::asio::ip::tcp::socket> &socket, const size_t peer_id)
+	{
+		if (ec)
+		{
+			fail(ec, "on_accept");
+		}
+		else
+		{
+			switch (type)
+			{
+#if XSERVER_PROTOTYPE_TCP
+			case XSERVER_TCP:
+			{
+				xworker_ptr peer_ptr = std::make_shared<xworker_t>(*static_cast<T*>(this), peer_id, std::move(*socket));
+				on_io_accept(peer_ptr);
+				peer_ptr->run();
+			}
+			break;
+#endif //
+#if XSERVER_PROTOTYPE_HTTP
+			case XSERVER_HTTP:
+			case XSERVER_HTTPS:
+			{
+				detect_ptr peer_ptr = std::make_shared<detect_session<T>>(*static_cast<T*>(this), peer_id, std::move(*socket),
+																		  io_ssl_context_,
+																		  root_directory_);
+				on_io_accept(peer_ptr, type);
+				peer_ptr->run();
+			}
+			break;
+#endif //
+#if XSERVER_PROTOTYPE_WEBSOCKET
+			case XSERVER_WEBSOCKET:
+			{
+				ws_ptr peer_ptr = std::make_shared<ws_t>(*static_cast<T*>(this), peer_id, std::move(*socket));
+				on_io_accept(peer_ptr);
+				peer_ptr->run();
+			}
+			break;
+#endif //
+#if XSERVER_PROTOTYPE_SSL_WEBSOCKET
+			case XSERVER_SSL_WEBSOCKET:
+			{
+				wss_ptr peer_ptr = std::make_shared<wss_clt_t>(*static_cast<T*>(this), peer_id, std::move(*socket),
+																			  io_ssl_context_);
+				on_io_accept(peer_ptr);
+				peer_ptr->run();
+			}
+			break;
+#endif //
+			default:
+				BOOST_ASSERT(false);
+				return;
+				break;
+			}
+		}
+		post_accept(acceptor, type);
+	}
+
+	size_t keepalive_;
+
+	size_t max_buffer_size_;
+
+	std::string log_directory_;
+
+	std::string ssl_directory_;
+
+	std::string root_directory_;
+
+	size_t io_thread_num_;
+	size_t work_thread_num_;
+
+	std::atomic<bool> stop_flag_;
+
+	std::shared_ptr<XIOService<T>> io_service_;
+	boost::asio::ssl::context io_ssl_context_;
+	std::atomic<size_t> peer_id_;
+	boost::unordered_map<size_t, boost::any> peer_map_;
+	boost::shared_mutex peer_mutex_;
+
+	std::shared_ptr<XWorkService<T>> work_service_;
+	std::shared_ptr<XIdleService<T>> idle_service_;
+};
+
+//}
+
+#endif //__H_XNET_H__
