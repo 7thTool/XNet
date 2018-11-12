@@ -1,5 +1,5 @@
 #include "XNet"
-//using namespace XNet;
+using namespace XNet;
 
 class XServer : public XServerT<XServer>
 {
