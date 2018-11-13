@@ -323,16 +323,40 @@ class XLogger : private boost::noncopyable
 	boost::log::sources::severity_logger<boost::log::trivial::severity_level> logger_;
 };
 
-#define LOG4D(format, ...) \
-	XLogger::instance().write(boost::log::trivial::debug, format, ##__VA_ARGS__)
-#define LOG4I(format, ...) \
-	XLogger::instance().write(boost::log::trivial::info, format, ##__VA_ARGS__)
-#define LOG4W(format, ...) \
-	XLogger::instance().write(boost::log::trivial::warning, format, ##__VA_ARGS__)
-#define LOG4E(format, ...) \
-	XLogger::instance().write(boost::log::trivial::error, format, ##__VA_ARGS__)
-//#define LOG4F(format, ...) \
+//#define XNET_LOG4D(format, ...) \
+//	XNet::XLogger::instance().write(boost::log::trivial::debug, format, ##__VA_ARGS__)
+//#define XNET_LOG4I(format, ...) \
+//	XNet::XLogger::instance().write(boost::log::trivial::info, format, ##__VA_ARGS__)
+//#define XNET_LOG4W(format, ...) \
+//	XNet::XLogger::instance().write(boost::log::trivial::warning, format, ##__VA_ARGS__)
+//#define XNET_LOG4E(format, ...) \
+//	XNet::XLogger::instance().write(boost::log::trivial::error, format, ##__VA_ARGS__)
+//#define XNET_LOG4F(format, ...) \
 //	XLogger::instance().write(boost::log::trivial::fatal, format, ## __VA_ARGS__)
+
+template <typename... Args>
+void LOG4D(const char *fmt, Args... args)
+{
+	XLogger::instance().write(boost::log::trivial::debug, fmt, args...);
+}
+
+template <typename... Args>
+void LOG4I(const char *fmt, Args... args)
+{
+	XLogger::instance().write(boost::log::trivial::info, fmt, args...);
+}
+
+template <typename... Args>
+void LOG4W(const char *fmt, Args... args)
+{
+	XLogger::instance().write(boost::log::trivial::warning, fmt, args...);
+}
+
+template <typename... Args>
+void LOG4E(const char *fmt, Args... args)
+{
+	XLogger::instance().write(boost::log::trivial::error, fmt, args...);
+}
 
 /// x initial reserve (size) bytes read write buffer class
 ///
@@ -858,6 +882,312 @@ protected:
 
 #if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
 
+/** C++11 enabled SSL socket wrapper
+
+    This wrapper provides an interface identical to `boost::asio::ssl::stream`,
+    with the following additional properties:
+    
+    @li Satisfies @b MoveConstructible
+    
+    @li Satisfies @b MoveAssignable
+   
+    @li Constructible from a moved socket.
+*/
+template<class NextLayer>
+class ssl_stream
+    : public boost::asio::ssl::stream_base
+{
+    using stream_type = boost::asio::ssl::stream<NextLayer>;
+
+    std::unique_ptr<stream_type> p_;
+    boost::asio::ssl::context* ctx_;
+
+public:
+    /// The native handle type of the SSL stream.
+    using native_handle_type = typename stream_type::native_handle_type;
+
+    /// Structure for use with deprecated impl_type.
+    using impl_struct = typename stream_type::impl_struct;
+
+    /// The type of the next layer.
+    using next_layer_type = typename stream_type::next_layer_type;
+
+    /// The type of the lowest layer.
+    using lowest_layer_type = typename stream_type::lowest_layer_type;
+
+    /// The type of the executor associated with the object.
+    using executor_type = typename stream_type::executor_type;
+
+    template<class Arg>
+    ssl_stream(
+        Arg&& arg,
+        boost::asio::ssl::context& ctx)
+        : p_(new stream_type{
+            std::forward<Arg>(arg), ctx})
+        , ctx_(&ctx)
+    {
+    }
+
+    ssl_stream(ssl_stream&& other)
+        : p_(std::move(other.p_))
+        , ctx_(other.ctx_)
+    {
+    }
+
+    ssl_stream& operator=(ssl_stream&& other)
+    {
+        p_ = std::move(other.p_);
+        ctx_ = other.ctx_;
+        return *this;
+    }
+
+    executor_type
+    get_executor() noexcept
+    {
+        return p_->get_executor();
+    }
+
+    native_handle_type
+    native_handle()
+    {
+        return p_->native_handle();
+    }
+
+    next_layer_type const&
+    next_layer() const
+    {
+        return p_->next_layer();
+    }
+
+    next_layer_type&
+    next_layer()
+    {
+        return p_->next_layer();
+    }
+
+    lowest_layer_type&
+    lowest_layer()
+    {
+        return p_->lowest_layer();
+    }
+
+    lowest_layer_type const&
+    lowest_layer() const
+    {
+        return p_->lowest_layer();
+    }
+
+    void
+    set_verify_mode(boost::asio::ssl::verify_mode v)
+    {
+        p_->set_verify_mode(v);
+    }
+
+    boost::system::error_code
+    set_verify_mode(boost::asio::ssl::verify_mode v,
+        boost::system::error_code& ec)
+    {
+        return p_->set_verify_mode(v, ec);
+    }
+
+    void
+    set_verify_depth(int depth)
+    {
+        p_->set_verify_depth(depth);
+    }
+
+    boost::system::error_code
+    set_verify_depth(
+        int depth, boost::system::error_code& ec)
+    {
+        return p_->set_verify_depth(depth, ec);
+    }
+
+    template<class VerifyCallback>
+    void
+    set_verify_callback(VerifyCallback callback)
+    {
+        p_->set_verify_callback(callback);
+    }
+
+    template<class VerifyCallback>
+    boost::system::error_code
+    set_verify_callback(VerifyCallback callback,
+        boost::system::error_code& ec)
+    {
+        return p_->set_verify_callback(callback, ec);
+    }
+
+    void
+    handshake(handshake_type type)
+    {
+        p_->handshake(type);
+    }
+
+    boost::system::error_code
+    handshake(handshake_type type,
+        boost::system::error_code& ec)
+    {
+        return p_->handshake(type, ec);
+    }
+
+    template<class ConstBufferSequence>
+    void
+    handshake(
+        handshake_type type, ConstBufferSequence const& buffers)
+    {
+        p_->handshake(type, buffers);
+    }
+
+    template<class ConstBufferSequence>
+    boost::system::error_code
+    handshake(handshake_type type,
+        ConstBufferSequence const& buffers,
+            boost::system::error_code& ec)
+    {
+        return p_->handshake(type, buffers, ec);
+    }
+
+    template<class HandshakeHandler>
+    BOOST_ASIO_INITFN_RESULT_TYPE(HandshakeHandler,
+        void(boost::system::error_code))
+    async_handshake(handshake_type type,
+        BOOST_ASIO_MOVE_ARG(HandshakeHandler) handler)
+    {
+        return p_->async_handshake(type,
+            BOOST_ASIO_MOVE_CAST(HandshakeHandler)(handler));
+    }
+
+    template<class ConstBufferSequence, class BufferedHandshakeHandler>
+    BOOST_ASIO_INITFN_RESULT_TYPE(BufferedHandshakeHandler,
+        void (boost::system::error_code, std::size_t))
+    async_handshake(handshake_type type, ConstBufferSequence const& buffers,
+        BOOST_ASIO_MOVE_ARG(BufferedHandshakeHandler) handler)
+    {
+        return p_->async_handshake(type, buffers,
+            BOOST_ASIO_MOVE_CAST(BufferedHandshakeHandler)(handler));
+    }
+
+    void
+    shutdown()
+    {
+        p_->shutdown();
+    }
+
+    boost::system::error_code
+    shutdown(boost::system::error_code& ec)
+    {
+        return p_->shutdown(ec);
+    }
+
+    template<class ShutdownHandler>
+    BOOST_ASIO_INITFN_RESULT_TYPE(ShutdownHandler,
+        void (boost::system::error_code))
+    async_shutdown(BOOST_ASIO_MOVE_ARG(ShutdownHandler) handler)
+    {
+        return p_->async_shutdown(
+            BOOST_ASIO_MOVE_CAST(ShutdownHandler)(handler));
+    }
+
+    template<class ConstBufferSequence>
+    std::size_t
+    write_some(ConstBufferSequence const& buffers)
+    {
+        return p_->write_some(buffers);
+    }
+
+    template<class ConstBufferSequence>
+    std::size_t
+    write_some(ConstBufferSequence const& buffers,
+        boost::system::error_code& ec)
+    {
+        return p_->write_some(buffers, ec);
+    }
+
+    template<class ConstBufferSequence, class WriteHandler>
+    BOOST_ASIO_INITFN_RESULT_TYPE(WriteHandler,
+        void (boost::system::error_code, std::size_t))
+    async_write_some(ConstBufferSequence const& buffers,
+        BOOST_ASIO_MOVE_ARG(WriteHandler) handler)
+    {
+        return p_->async_write_some(buffers,
+            BOOST_ASIO_MOVE_CAST(WriteHandler)(handler));
+    }
+
+    template<class MutableBufferSequence>
+    std::size_t
+    read_some(MutableBufferSequence const& buffers)
+    {
+        return p_->read_some(buffers);
+    }
+
+    template<class MutableBufferSequence>
+    std::size_t
+    read_some(MutableBufferSequence const& buffers,
+        boost::system::error_code& ec)
+    {
+        return p_->read_some(buffers, ec);
+    }
+
+    template<class MutableBufferSequence, class ReadHandler>
+    BOOST_ASIO_INITFN_RESULT_TYPE(ReadHandler,
+        void(boost::system::error_code, std::size_t))
+    async_read_some(MutableBufferSequence const& buffers,
+        BOOST_ASIO_MOVE_ARG(ReadHandler) handler)
+    {
+        return p_->async_read_some(buffers,
+            BOOST_ASIO_MOVE_CAST(ReadHandler)(handler));
+    }
+
+    template<class SyncStream>
+    friend
+    void
+    teardown(boost::beast::websocket::role_type,
+        ssl_stream<SyncStream>& stream,
+            boost::system::error_code& ec);
+
+    template<class AsyncStream, class TeardownHandler>
+    friend
+    void
+    async_teardown(boost::beast::websocket::role_type,
+        ssl_stream<AsyncStream>& stream, TeardownHandler&& handler);
+};
+
+// These hooks are used to inform boost::beast::websocket::stream on
+// how to tear down the connection as part of the WebSocket
+// protocol specifications
+
+template<class SyncStream>
+inline
+void
+teardown(
+    boost::beast::websocket::role_type role,
+    ssl_stream<SyncStream>& stream,
+    boost::system::error_code& ec)
+{
+    // Just forward it to the wrapped ssl::stream
+    using boost::beast::websocket::teardown;
+    teardown(role, *stream.p_, ec);
+}
+
+template<class AsyncStream, class TeardownHandler>
+inline
+void
+async_teardown(
+    boost::beast::websocket::role_type role,
+    ssl_stream<AsyncStream>& stream,
+    TeardownHandler&& handler)
+{
+    // Just forward it to the wrapped ssl::stream
+    using boost::beast::websocket::async_teardown;
+    async_teardown(role,
+        *stream.p_, std::forward<TeardownHandler>(handler));
+}
+
+#endif
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
+
 //[example_core_detect_ssl_1
 
 /** Return `true` if a buffer contains a TLS/SSL client handshake.
@@ -1297,322 +1627,17 @@ operator()(boost::beast::error_code ec, std::size_t bytes_transferred)
 
 #endif
 
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
-
-/** C++11 enabled SSL socket wrapper
-
-    This wrapper provides an interface identical to `boost::asio::ssl::stream`,
-    with the following additional properties:
-    
-    @li Satisfies @b MoveConstructible
-    
-    @li Satisfies @b MoveAssignable
-   
-    @li Constructible from a moved socket.
-*/
-template<class NextLayer>
-class ssl_stream
-    : public boost::asio::ssl::stream_base
-{
-    using stream_type = boost::asio::ssl::stream<NextLayer>;
-
-    std::unique_ptr<stream_type> p_;
-    boost::asio::ssl::context* ctx_;
-
-public:
-    /// The native handle type of the SSL stream.
-    using native_handle_type = typename stream_type::native_handle_type;
-
-    /// Structure for use with deprecated impl_type.
-    using impl_struct = typename stream_type::impl_struct;
-
-    /// The type of the next layer.
-    using next_layer_type = typename stream_type::next_layer_type;
-
-    /// The type of the lowest layer.
-    using lowest_layer_type = typename stream_type::lowest_layer_type;
-
-    /// The type of the executor associated with the object.
-    using executor_type = typename stream_type::executor_type;
-
-    template<class Arg>
-    ssl_stream(
-        Arg&& arg,
-        boost::asio::ssl::context& ctx)
-        : p_(new stream_type{
-            std::forward<Arg>(arg), ctx})
-        , ctx_(&ctx)
-    {
-    }
-
-    ssl_stream(ssl_stream&& other)
-        : p_(std::move(other.p_))
-        , ctx_(other.ctx_)
-    {
-    }
-
-    ssl_stream& operator=(ssl_stream&& other)
-    {
-        p_ = std::move(other.p_);
-        ctx_ = other.ctx_;
-        return *this;
-    }
-
-    executor_type
-    get_executor() noexcept
-    {
-        return p_->get_executor();
-    }
-
-    native_handle_type
-    native_handle()
-    {
-        return p_->native_handle();
-    }
-
-    next_layer_type const&
-    next_layer() const
-    {
-        return p_->next_layer();
-    }
-
-    next_layer_type&
-    next_layer()
-    {
-        return p_->next_layer();
-    }
-
-    lowest_layer_type&
-    lowest_layer()
-    {
-        return p_->lowest_layer();
-    }
-
-    lowest_layer_type const&
-    lowest_layer() const
-    {
-        return p_->lowest_layer();
-    }
-
-    void
-    set_verify_mode(boost::asio::ssl::verify_mode v)
-    {
-        p_->set_verify_mode(v);
-    }
-
-    boost::system::error_code
-    set_verify_mode(boost::asio::ssl::verify_mode v,
-        boost::system::error_code& ec)
-    {
-        return p_->set_verify_mode(v, ec);
-    }
-
-    void
-    set_verify_depth(int depth)
-    {
-        p_->set_verify_depth(depth);
-    }
-
-    boost::system::error_code
-    set_verify_depth(
-        int depth, boost::system::error_code& ec)
-    {
-        return p_->set_verify_depth(depth, ec);
-    }
-
-    template<class VerifyCallback>
-    void
-    set_verify_callback(VerifyCallback callback)
-    {
-        p_->set_verify_callback(callback);
-    }
-
-    template<class VerifyCallback>
-    boost::system::error_code
-    set_verify_callback(VerifyCallback callback,
-        boost::system::error_code& ec)
-    {
-        return p_->set_verify_callback(callback, ec);
-    }
-
-    void
-    handshake(handshake_type type)
-    {
-        p_->handshake(type);
-    }
-
-    boost::system::error_code
-    handshake(handshake_type type,
-        boost::system::error_code& ec)
-    {
-        return p_->handshake(type, ec);
-    }
-
-    template<class ConstBufferSequence>
-    void
-    handshake(
-        handshake_type type, ConstBufferSequence const& buffers)
-    {
-        p_->handshake(type, buffers);
-    }
-
-    template<class ConstBufferSequence>
-    boost::system::error_code
-    handshake(handshake_type type,
-        ConstBufferSequence const& buffers,
-            boost::system::error_code& ec)
-    {
-        return p_->handshake(type, buffers, ec);
-    }
-
-    template<class HandshakeHandler>
-    BOOST_ASIO_INITFN_RESULT_TYPE(HandshakeHandler,
-        void(boost::system::error_code))
-    async_handshake(handshake_type type,
-        BOOST_ASIO_MOVE_ARG(HandshakeHandler) handler)
-    {
-        return p_->async_handshake(type,
-            BOOST_ASIO_MOVE_CAST(HandshakeHandler)(handler));
-    }
-
-    template<class ConstBufferSequence, class BufferedHandshakeHandler>
-    BOOST_ASIO_INITFN_RESULT_TYPE(BufferedHandshakeHandler,
-        void (boost::system::error_code, std::size_t))
-    async_handshake(handshake_type type, ConstBufferSequence const& buffers,
-        BOOST_ASIO_MOVE_ARG(BufferedHandshakeHandler) handler)
-    {
-        return p_->async_handshake(type, buffers,
-            BOOST_ASIO_MOVE_CAST(BufferedHandshakeHandler)(handler));
-    }
-
-    void
-    shutdown()
-    {
-        p_->shutdown();
-    }
-
-    boost::system::error_code
-    shutdown(boost::system::error_code& ec)
-    {
-        return p_->shutdown(ec);
-    }
-
-    template<class ShutdownHandler>
-    BOOST_ASIO_INITFN_RESULT_TYPE(ShutdownHandler,
-        void (boost::system::error_code))
-    async_shutdown(BOOST_ASIO_MOVE_ARG(ShutdownHandler) handler)
-    {
-        return p_->async_shutdown(
-            BOOST_ASIO_MOVE_CAST(ShutdownHandler)(handler));
-    }
-
-    template<class ConstBufferSequence>
-    std::size_t
-    write_some(ConstBufferSequence const& buffers)
-    {
-        return p_->write_some(buffers);
-    }
-
-    template<class ConstBufferSequence>
-    std::size_t
-    write_some(ConstBufferSequence const& buffers,
-        boost::system::error_code& ec)
-    {
-        return p_->write_some(buffers, ec);
-    }
-
-    template<class ConstBufferSequence, class WriteHandler>
-    BOOST_ASIO_INITFN_RESULT_TYPE(WriteHandler,
-        void (boost::system::error_code, std::size_t))
-    async_write_some(ConstBufferSequence const& buffers,
-        BOOST_ASIO_MOVE_ARG(WriteHandler) handler)
-    {
-        return p_->async_write_some(buffers,
-            BOOST_ASIO_MOVE_CAST(WriteHandler)(handler));
-    }
-
-    template<class MutableBufferSequence>
-    std::size_t
-    read_some(MutableBufferSequence const& buffers)
-    {
-        return p_->read_some(buffers);
-    }
-
-    template<class MutableBufferSequence>
-    std::size_t
-    read_some(MutableBufferSequence const& buffers,
-        boost::system::error_code& ec)
-    {
-        return p_->read_some(buffers, ec);
-    }
-
-    template<class MutableBufferSequence, class ReadHandler>
-    BOOST_ASIO_INITFN_RESULT_TYPE(ReadHandler,
-        void(boost::system::error_code, std::size_t))
-    async_read_some(MutableBufferSequence const& buffers,
-        BOOST_ASIO_MOVE_ARG(ReadHandler) handler)
-    {
-        return p_->async_read_some(buffers,
-            BOOST_ASIO_MOVE_CAST(ReadHandler)(handler));
-    }
-
-    template<class SyncStream>
-    friend
-    void
-    teardown(boost::beast::websocket::role_type,
-        ssl_stream<SyncStream>& stream,
-            boost::system::error_code& ec);
-
-    template<class AsyncStream, class TeardownHandler>
-    friend
-    void
-    async_teardown(boost::beast::websocket::role_type,
-        ssl_stream<AsyncStream>& stream, TeardownHandler&& handler);
-};
-
-// These hooks are used to inform boost::beast::websocket::stream on
-// how to tear down the connection as part of the WebSocket
-// protocol specifications
-
-template<class SyncStream>
-inline
-void
-teardown(
-    boost::beast::websocket::role_type role,
-    ssl_stream<SyncStream>& stream,
-    boost::system::error_code& ec)
-{
-    // Just forward it to the wrapped ssl::stream
-    using boost::beast::websocket::teardown;
-    teardown(role, *stream.p_, ec);
-}
-
-template<class AsyncStream, class TeardownHandler>
-inline
-void
-async_teardown(
-    boost::beast::websocket::role_type role,
-    ssl_stream<AsyncStream>& stream,
-    TeardownHandler&& handler)
-{
-    // Just forward it to the wrapped ssl::stream
-    using boost::beast::websocket::async_teardown;
-    async_teardown(role,
-        *stream.p_, std::forward<TeardownHandler>(handler));
-}
-
-#endif
-
-
 #if XSERVER_PROTOTYPE_TCP
 
 // XSocket
 template <class Server, class Derived>
 class XSocket : public XPeer<Server>
 {
+	typedef XSocket<Server,Derived> This;
+	typedef XPeer<Server> Base;
   public:
 	XSocket(Server &srv, size_t id)
-		: XPeer(srv, id), recv_buffer_(srv.max_buffer_size())
+		: Base(srv, id), recv_buffer_(srv.max_buffer_size())
 		  //, send_buffer_(srv.max_buffer_size()), write_buffer_(srv.max_buffer_size())
 		  ,
 		  write_complete(true)
@@ -1851,10 +1876,11 @@ class XWorker
 	  public std::enable_shared_from_this<XWorker<Server>>,
 	  private boost::noncopyable
 {
-typedef XWorker<Server> T;
+	typedef XWorker<Server> This;
+	typedef XSocket<Server, XWorker<Server>> Base;
   public:
 	XWorker(Server &srv, size_t id, boost::asio::ip::tcp::socket sock)
-		: XSocket(srv, MAKE_PEER_ID(PEER_TYPE_TCP, id)), sock_(std::move(sock))
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_TCP, id)), sock_(std::move(sock))
 	{
 	}
 
@@ -1887,10 +1913,12 @@ class XConnector
 	  public std::enable_shared_from_this<XConnector<Server>>,
 	  private boost::noncopyable
 {
-typedef XConnector<Server> T;
+	typedef XConnector<Server> This;
+	typedef XSocket<Server, XConnector<Server>> Base;
+	typedef XResolver<Server, XConnector<Server>> Resolver;
   public:
 	XConnector(Server &srv, size_t id, boost::asio::ip::tcp::socket sock)
-		: XSocket(srv, MAKE_PEER_ID(PEER_TYPE_TCP_CLIENT, id)), XResolver(sock.get_executor().context()), sock_(std::move(sock))
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_TCP_CLIENT, id)), Resolver(sock.get_executor().context()), sock_(std::move(sock))
 	{
 	}
 
@@ -1921,7 +1949,7 @@ typedef XConnector<Server> T;
 			results.begin(),
 			results.end(),
 			std::bind(
-				&XConnector::on_connect,
+				&This::on_connect,
 				shared_from_this(),
 				std::placeholders::_1));
 	}
@@ -2344,7 +2372,7 @@ class plain_websocket_session
 	: public websocket_session<Server, plain_websocket_session<Server>>
 	, public std::enable_shared_from_this<plain_websocket_session<Server>>
 {
-	typedef plain_websocket_session<Server> T;
+	typedef plain_websocket_session<Server> This;
 	typedef websocket_session<Server, plain_websocket_session<Server>> Base;
 	boost::beast::websocket::stream<boost::asio::ip::tcp::socket> ws_;
 	bool close_ = false;
@@ -2414,7 +2442,7 @@ class plain_websocket_session
 			boost::asio::bind_executor(
 				Base::strand_,
 				std::bind(
-					&T::on_close,
+					&This::on_close,
 					shared_from_this(),
 					std::placeholders::_1)));
 	}
@@ -2436,7 +2464,7 @@ class plain_websocket_session
 			boost::asio::bind_executor(
 				Base::strand_,
 				std::bind(
-					&T::on_close,
+					&This::on_close,
 					shared_from_this(),
 					std::placeholders::_1)));
 	}
@@ -2465,7 +2493,7 @@ class ssl_websocket_session
 	: public websocket_session<Server, ssl_websocket_session<Server>>
 	,  public std::enable_shared_from_this<ssl_websocket_session<Server>>
 {
-	typedef ssl_websocket_session<Server> T;
+	typedef ssl_websocket_session<Server> This;
 	typedef websocket_session<Server, ssl_websocket_session<Server>> Base;
 	boost::beast::websocket::stream<ssl_stream<boost::asio::ip::tcp::socket>> ws_;
 	boost::asio::strand<
@@ -2536,7 +2564,7 @@ class ssl_websocket_session
 			boost::asio::bind_executor(
 				strand_,
 				std::bind(
-					&T::on_handshake,
+					&This::on_handshake,
 					shared_from_this(),
 					std::placeholders::_1)));
 	}
@@ -2568,7 +2596,7 @@ class ssl_websocket_session
 			boost::asio::bind_executor(
 				strand_,
 				std::bind(
-					&T::on_shutdown,
+					&This::on_shutdown,
 					shared_from_this(),
 					std::placeholders::_1)));
 	}
@@ -2919,7 +2947,7 @@ class plain_http_session
 	: public http_session<Server, plain_http_session<Server>>,
 	  public std::enable_shared_from_this<plain_http_session<Server>>
 {
-	typedef plain_http_session<Server> T;
+	typedef plain_http_session<Server> This;
 	typedef http_session<Server, plain_http_session<Server>> Base;
 	boost::asio::ip::tcp::socket socket_;
 	boost::asio::strand<
@@ -3007,7 +3035,7 @@ class ssl_http_session
 	: public http_session<Server, ssl_http_session<Server>>,
 	  public std::enable_shared_from_this<ssl_http_session<Server>>
 {
-	typedef ssl_http_session<Server> T;
+	typedef ssl_http_session<Server> This;
 	typedef http_session<Server, ssl_http_session<Server>> Base;
 	ssl_stream<boost::asio::ip::tcp::socket> stream_;
 	boost::asio::strand<
@@ -3078,7 +3106,7 @@ class ssl_http_session
 			boost::asio::bind_executor(
 				strand_,
 				std::bind(
-					&T::on_handshake,
+					&This::on_handshake,
 					shared_from_this(),
 					std::placeholders::_1,
 					std::placeholders::_2)));
@@ -3114,7 +3142,7 @@ class ssl_http_session
 			boost::asio::bind_executor(
 				strand_,
 				std::bind(
-					&T::on_shutdown,
+					&This::on_shutdown,
 					shared_from_this(),
 					std::placeholders::_1)));
 	}
@@ -3155,7 +3183,7 @@ class detect_session
 	: public XPeer<Server>,
 	  public std::enable_shared_from_this<detect_session<Server>>
 {
-	typedef detect_session<Server> T;
+	typedef detect_session<Server> This;
 	typedef XPeer<Server> Base;
 	boost::asio::ip::tcp::socket socket_;
 	boost::asio::ssl::context &ctx_;
@@ -3186,7 +3214,7 @@ class detect_session
 			boost::asio::bind_executor(
 				strand_,
 				std::bind(
-					&T::on_detect,
+					&This::on_detect,
 					shared_from_this(),
 					std::placeholders::_1,
 					std::placeholders::_2)));
@@ -3514,7 +3542,7 @@ class plain_websocket_client_session
 	: public websocket_client_session<Server, plain_websocket_client_session<Server>>,
 	  public std::enable_shared_from_this<plain_websocket_client_session<Server>>
 {
-	typedef plain_websocket_client_session<Server> T;
+	typedef plain_websocket_client_session<Server> This;
 	typedef websocket_client_session<Server, plain_websocket_client_session<Server>> Base;
 	boost::beast::websocket::stream<boost::asio::ip::tcp::socket> ws_;
 
@@ -3548,7 +3576,7 @@ class plain_websocket_client_session
 			results.begin(),
 			results.end(),
 			std::bind(
-				&T::on_connect,
+				&This::on_connect,
 				shared_from_this(),
 				std::placeholders::_1));
 	}
@@ -3573,7 +3601,7 @@ class ssl_websocket_client_session
 	: public websocket_client_session<Server, ssl_websocket_client_session<Server>>,
 	  public std::enable_shared_from_this<ssl_websocket_client_session<Server>>
 {
-	typedef ssl_websocket_client_session<Server> T;
+	typedef ssl_websocket_client_session<Server> This;
 	typedef websocket_client_session<Server, ssl_websocket_client_session<Server>> Base;
 	boost::beast::websocket::stream<ssl_stream<boost::asio::ip::tcp::socket>> ws_;
 
@@ -3606,7 +3634,7 @@ class ssl_websocket_client_session
 			results.begin(),
 			results.end(),
 			std::bind(
-				&T::on_connect,
+				&This::on_connect,
 				shared_from_this(),
 				std::placeholders::_1));
 	}
@@ -3886,7 +3914,7 @@ typedef std::weak_ptr<wss_t> wss_weak_ptr;
 typedef std::shared_ptr<wss_clt_t> wss_clt_ptr; 
 typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr; 
 #endif
-typedef XIdleService<Server> T;
+typedef XIdleService<Server> This;
   public:
 	XIdleService(Server &srv)
 		: server_(srv), service_(), service_work_(service_), timing_wheel_timer_(service_)
@@ -3930,22 +3958,22 @@ typedef XIdleService<Server> T;
 
 	void add(xworker_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&T::on_add_worker, static_cast<T*>(this), peer_ptr));
+		service_.post(boost::bind(&This::on_add_worker, this, peer_ptr));
 	}
 
 	void add(xconnector_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&T::on_add_connector, static_cast<T*>(this), peer_ptr));
+		service_.post(boost::bind(&This::on_add_connector, this, peer_ptr));
 	}
 
 	void active(xworker_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&T::on_active_worker, static_cast<T*>(this), peer_ptr));
+		service_.post(boost::bind(&This::on_active_worker, this, peer_ptr));
 	}
 
 	void active(xconnector_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&T::on_active_connector, static_cast<T*>(this), peer_ptr));
+		service_.post(boost::bind(&This::on_active_connector, this, peer_ptr));
 	}
 
 #endif //
@@ -3954,22 +3982,22 @@ typedef XIdleService<Server> T;
 
 	void add(ws_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&T::on_add_ws, static_cast<T*>(this), peer_ptr));
+		service_.post(boost::bind(&This::on_add_ws, this, peer_ptr));
 	}
 
 	void add(ws_clt_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&T::on_add_ws_client, static_cast<T*>(this), peer_ptr));
+		service_.post(boost::bind(&This::on_add_ws_client, this, peer_ptr));
 	}
 
 	void active(ws_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&T::on_active_ws, static_cast<T*>(this), peer_ptr));
+		service_.post(boost::bind(&This::on_active_ws, this, peer_ptr));
 	}
 
 	void active(ws_clt_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&on_active_ws_client, static_cast<T*>(this), peer_ptr));
+		service_.post(boost::bind(&This::on_active_ws_client, this, peer_ptr));
 	}
 
 #endif //
@@ -3978,23 +4006,23 @@ typedef XIdleService<Server> T;
 
 	void add(wss_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&T::on_add_wss, static_cast<T*>(this), peer_ptr));
+		service_.post(boost::bind(&This::on_add_wss, this, peer_ptr));
 	}
 
 	void add(wss_clt_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&T::on_add_wss_client, static_cast<T*>(this), peer_ptr));
+		service_.post(boost::bind(&This::on_add_wss_client, this, peer_ptr));
 	}
 
 	void active(wss_ptr peer_ptr)
 	{
-		/*service_.post(boost::bind(&T::on_active_wss
-		, static_cast<T*>(this), peer_ptr));*/
+		/*service_.post(boost::bind(&on_active_wss
+		, this, peer_ptr));*/
 	}
 
 	void active(wss_clt_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&T::on_active_wss_client, static_cast<T*>(this), peer_ptr));
+		service_.post(boost::bind(&This::on_active_wss_client, this, peer_ptr));
 	}
 
 #endif //
@@ -4135,7 +4163,7 @@ typedef XIdleService<Server> T;
 		boost::system::error_code ec;
 		timing_wheel_timer_.cancel(ec);
 		timing_wheel_timer_.expires_from_now(boost::posix_time::seconds(1));
-		timing_wheel_timer_.async_wait(boost::bind(&T::on_timing_wheel, static_cast<T*>(this), boost::asio::placeholders::error));
+		timing_wheel_timer_.async_wait(boost::bind(&This::on_timing_wheel, this, boost::asio::placeholders::error));
 	}
 
 	void on_timing_wheel(const boost::system::error_code &ec)
