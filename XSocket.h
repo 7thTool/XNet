@@ -85,7 +85,7 @@ class XSocket : public XPeer<Server>
 	{
 		boost::asio::ip::tcp::endpoint ep = derived().get_remote_endpoint();
 		std::string str = ep.address().to_string();
-		XNET_LOG4E("peer(%d) %s:%d waht=%s error=%s", id(), str.c_str(), ep.port(), what, ec.message().c_str());
+		LOG4E("peer(%d) %s:%d waht=%s error=%s", id(), str.c_str(), ep.port(), what, ec.message().c_str());
 	}
 
 	bool is_open()
@@ -126,7 +126,7 @@ class XSocket : public XPeer<Server>
 	// 		else if (len < 0) {
 	// 			boost::asio::ip::tcp::endpoint ep = get_remote_endpoint();
 	// 			std::string str = ep.address().to_string();
-	// 			XNET_LOG4E("XPEER(%d) %s:%d READ PACKAGE ERROR", id(), str.c_str(), ep.port());
+	// 			LOG4E("XPEER(%d) %s:%d READ PACKAGE ERROR", id(), str.c_str(), ep.port());
 	// 			derived().do_close();
 	// 		}
 	// 		else {
@@ -160,7 +160,7 @@ class XSocket : public XPeer<Server>
 	{
 		BOOST_ASSERT(is_open());
 #ifdef _DEBUG
-		XNET_LOG4I("XPEER(%d) WRITE %d", id(), len);
+		LOG4I("XPEER(%d) WRITE %d", id(), len);
 #endif //
 		boost::mutex::scoped_lock lock(write_mutex_);
 		send_buffer_.append(buf, len);
@@ -185,7 +185,7 @@ class XSocket : public XPeer<Server>
 		if (!ec)
 		{
 #ifdef _DEBUG
-			XNET_LOG4I("XPEER(%d) ON_READ %d", id(), bytes_transferred);
+			LOG4I("XPEER(%d) ON_READ %d", id(), bytes_transferred);
 #endif //
 			/*boost::mutex::scoped_lock lock(mutex_);
 			recv_buffer_.append(read_buffer_, bytes_transferred);
@@ -200,7 +200,7 @@ class XSocket : public XPeer<Server>
 		{
 			boost::asio::ip::tcp::endpoint ep = get_remote_endpoint();
 			std::string str = ep.address().to_string();
-			XNET_LOG4E("XPEER(%d) %s:%d READ ERROR: %d", id(), str.c_str(), ep.port(), ec.value());
+			LOG4E("XPEER(%d) %s:%d READ ERROR: %d", id(), str.c_str(), ep.port(), ec.value());
 			derived().do_close();
 		}
 	}
@@ -222,7 +222,7 @@ class XSocket : public XPeer<Server>
 		{
 			BOOST_ASSERT(write_buffer_.size() == bytes_transferred);
 #ifdef _DEBUG
-			XNET_LOG4I("XPEER(%d) ON_WRITE %d", id(), bytes_transferred);
+			LOG4I("XPEER(%d) ON_WRITE %d", id(), bytes_transferred);
 #endif //
 			server().on_io_write(derived().shared_from_this(), write_buffer_);
 			boost::mutex::scoped_lock lock(write_mutex_);
@@ -236,7 +236,7 @@ class XSocket : public XPeer<Server>
 		{
 			boost::asio::ip::tcp::endpoint ep = get_remote_endpoint();
 			std::string str = ep.address().to_string();
-			XNET_LOG4E("XPEER(%d) %s:%d WRITE ERROR: %d", id(), str.c_str(), ep.port(), ec.value());
+			LOG4E("XPEER(%d) %s:%d WRITE ERROR: %d", id(), str.c_str(), ep.port(), ec.value());
 			derived().do_close();
 		}
 	}
@@ -281,7 +281,7 @@ class XWorker
 	{
 		boost::asio::ip::tcp::endpoint ep = get_remote_endpoint();
 		std::string str = ep.address().to_string();
-		XNET_LOG4I("XPEER(%d) %s:%d  CONNECTED", id(), str.c_str(), ep.port());
+		LOG4I("XPEER(%d) %s:%d  CONNECTED", id(), str.c_str(), ep.port());
 		return do_read();
 	}
 
@@ -322,7 +322,7 @@ class XConnector
 
 	void do_connect(const boost::asio::ip::tcp::resolver::results_type &results)
 	{
-		XNET_LOG4I("XPEER(%d) %s:%s  CONNECTING", id(), addr().c_str(), port().c_str());
+		LOG4I("XPEER(%d) %s:%s  CONNECTING", id(), addr().c_str(), port().c_str());
 		//sock_.async_connect(ep, boost::bind(&XConnector::on_connect
 		//	, shared_from_this()
 		//	, boost::asio::placeholders::error));
@@ -350,7 +350,7 @@ class XConnector
 		{
 			boost::asio::ip::tcp::endpoint ep = get_remote_endpoint();
 			std::string str = ep.address().to_string();
-			XNET_LOG4E("XPEER(%d) %s:%d CONNECT ERROR: %d", id(), str.c_str(), ep.port(), ec.value());
+			LOG4E("XPEER(%d) %s:%d CONNECT ERROR: %d", id(), str.c_str(), ep.port(), ec.value());
 			do_close();
 		}
 	}

@@ -12,11 +12,27 @@
 
 #ifdef WIN32
 #ifndef vsnprintf
-#define vsnprintf	vsprintf_s
+#define vsnprintf vsprintf_s
 #endif
 #endif
 
-namespace XNet {
+namespace XNet
+{
+
+// template<typename T0>
+// void printf(T0 val) {
+//     std::cout << val;
+// }
+// template<typename T, typename... Args>
+// void printf(T val, Args... args) {
+//     std::cout << val;
+//     printf(args...);
+// }
+// template<typename T0, typename... T>
+// void printf(T0 t0, T... t) {
+//     std::cout << t0;
+//     if constexpr (sizeof...(t) > 0) printf(t...);
+// }
 
 class XLogger : private boost::noncopyable
 {
@@ -65,17 +81,41 @@ class XLogger : private boost::noncopyable
 	boost::log::sources::severity_logger<boost::log::trivial::severity_level> logger_;
 };
 
-#define XNET_LOG4D(format, ...) \
-	XNet::XLogger::instance().write(boost::log::trivial::debug, format, ##__VA_ARGS__)
-#define XNET_LOG4I(format, ...) \
-	XNet::XLogger::instance().write(boost::log::trivial::info, format, ##__VA_ARGS__)
-#define XNET_LOG4W(format, ...) \
-	XNet::XLogger::instance().write(boost::log::trivial::warning, format, ##__VA_ARGS__)
-#define XNET_LOG4E(format, ...) \
-	XNet::XLogger::instance().write(boost::log::trivial::error, format, ##__VA_ARGS__)
+//#define XNET_LOG4D(format, ...) \
+//	XNet::XLogger::instance().write(boost::log::trivial::debug, format, ##__VA_ARGS__)
+//#define XNET_LOG4I(format, ...) \
+//	XNet::XLogger::instance().write(boost::log::trivial::info, format, ##__VA_ARGS__)
+//#define XNET_LOG4W(format, ...) \
+//	XNet::XLogger::instance().write(boost::log::trivial::warning, format, ##__VA_ARGS__)
+//#define XNET_LOG4E(format, ...) \
+//	XNet::XLogger::instance().write(boost::log::trivial::error, format, ##__VA_ARGS__)
 //#define XNET_LOG4F(format, ...) \
 //	XLogger::instance().write(boost::log::trivial::fatal, format, ## __VA_ARGS__)
 
+template <typename... Args>
+void LOG4D(const char *fmt, Args... args)
+{
+	XLogger::instance().write(boost::log::trivial::debug, fmt, args...);
 }
+
+template <typename... Args>
+void LOG4I(const char *fmt, Args... args)
+{
+	XLogger::instance().write(boost::log::trivial::info, fmt, args...);
+}
+
+template <typename... Args>
+void LOG4W(const char *fmt, Args... args)
+{
+	XLogger::instance().write(boost::log::trivial::warning, fmt, args...);
+}
+
+template <typename... Args>
+void LOG4E(const char *fmt, Args... args)
+{
+	XLogger::instance().write(boost::log::trivial::error, fmt, args...);
+}
+
+} // namespace XNet
 
 #endif //__H_XLOGGER_H_

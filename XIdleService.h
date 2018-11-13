@@ -356,7 +356,7 @@ typedef XIdleService<Server> This;
 			std::shared_ptr<entry> entry_ptr = entry_ptr_.lock();
 			if (entry_ptr)
 			{
-				XNET_LOG4I("XPeer%d) HAS BEEN KICKED", entry_ptr->id());
+				LOG4I("XPeer%d) HAS BEEN KICKED", entry_ptr->id());
 				entry_ptr->close();
 			}
 		}
@@ -367,7 +367,7 @@ typedef XIdleService<Server> This;
 			std::shared_ptr<entry> entry_ptr = entry_ptr_.lock();
 			if (entry_ptr)
 			{
-				XNET_LOG4I("XPeer%d) PING...", entry_ptr->id());
+				LOG4I("XPeer%d) PING...", entry_ptr->id());
 				entry_ptr->ping();
 			}
 		}

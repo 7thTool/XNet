@@ -91,8 +91,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		
 #endif //
 
-		XNET_LOG4I("XSERVER t=%d v=%s", XSERVER_PROTOTYPE, XSERVER_VERSION);
-		XNET_LOG4I("XSERVER starting io_thread=%d work_thread=%d", io_thread, work_thread);
+		LOG4I("XSERVER t=%d v=%s", XSERVER_PROTOTYPE, XSERVER_VERSION);
+		LOG4I("XSERVER starting io_thread=%d work_thread=%d", io_thread, work_thread);
 
 		idle_service_->start();
 
@@ -100,7 +100,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 		work_service_->Start(work_thread_num_);
 
-		XNET_LOG4I("XSERVER started");
+		LOG4I("XSERVER started");
 
 		return true;
 	}
@@ -116,7 +116,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		//size_t i;
 		boost::system::error_code ec;
 
-		XNET_LOG4I(" stoping");
+		LOG4I(" stoping");
 
 		//acceptor_.reset();
 
@@ -136,7 +136,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		work_service_.reset();
 		io_service_.reset();
 		
-		XNET_LOG4I("XSERVER stoped");
+		LOG4I("XSERVER stoped");
 	}
 
 	inline bool is_run() { return !stop_flag_; }
@@ -165,12 +165,12 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	void on_io_init(const size_t peer)
 	{
-		XNET_LOG4I("XSERVER on_io_init %d", peer);
+		LOG4I("XSERVER on_io_init %d", peer);
 	}
 
 	void on_io_term(const size_t peer)
 	{
-		XNET_LOG4I(" on_io_term %d", peer);
+		LOG4I(" on_io_term %d", peer);
 	}
 
 	template <typename F>
@@ -194,12 +194,12 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	void on_work_init(const size_t peer)
 	{
-		XNET_LOG4I("XSERVER on_work_init %d", peer);
+		LOG4I("XSERVER on_work_init %d", peer);
 	}
 
 	void on_work_term(const size_t peer)
 	{
-		XNET_LOG4I("XSERVER on_work_term %d", peer);
+		LOG4I("XSERVER on_work_term %d", peer);
 	}
 
 	template <typename F>
@@ -234,7 +234,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			return 0;
 		}
 
-		XNET_LOG4I("XSERVER connecting addr=%s port=%d type=%d", addr, port, type);
+		LOG4I("XSERVER connecting addr=%s port=%d type=%d", addr, port, type);
 
 		size_t peer_id = 0;
 		if (io_channel != (x_size_t)-1)
@@ -299,7 +299,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			return false;
 		}
 
-		XNET_LOG4I("XSERVER listen port=%d type=%d", port, type);
+		LOG4I("XSERVER listen port=%d type=%d", port, type);
 
 		boost::system::error_code ec;
 		boost::asio::ip::tcp::endpoint ep(boost::asio::ip::tcp::v4(), port);
@@ -319,7 +319,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			return;
 		}
 
-		XNET_LOG4I("XServer CLOSE PEER(%d,%d)", PEER_TYPE(peer), PEER_ID(peer));
+		LOG4I("XServer CLOSE PEER(%d,%d)", PEER_TYPE(peer), PEER_ID(peer));
 
 		boost::shared_lock<boost::shared_mutex> lock(peer_mutex_);
 		boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer);
@@ -608,7 +608,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		XNET_LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
 		//}
 	}
 
@@ -639,7 +639,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		XNET_LOG4I("XConnector(%d) HAS BEEN CLOSED", peer_ptr->id());
+		LOG4I("XConnector(%d) HAS BEEN CLOSED", peer_ptr->id());
 		//}
 	}
 #endif //
@@ -789,7 +789,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		XNET_LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
 		//}
 	}
 
@@ -808,7 +808,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		XNET_LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
 		//}
 	}
 
@@ -850,7 +850,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		XNET_LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
 		//}
 	}
 
@@ -884,7 +884,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		XNET_LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
 		//}
 	}
 
@@ -921,7 +921,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		XNET_LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
 		//}
 	}
 
@@ -955,7 +955,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		XNET_LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
 		//}
 	}
 

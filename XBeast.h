@@ -1628,7 +1628,7 @@ class plain_websocket_client_session
 	void
 	do_connect(boost::asio::ip::tcp::resolver::results_type results)
 	{
-		XNET_LOG4I("XPEER(%d) %s:%s  CONNECTING", id(), addr().c_str(), port().c_str());
+		LOG4I("XPEER(%d) %s:%s  CONNECTING", id(), addr().c_str(), port().c_str());
 		// Make the connection on the IP address we get from a lookup
 		boost::asio::async_connect(
 			derived().ws().next_layer(),
@@ -1686,7 +1686,7 @@ class ssl_websocket_client_session
 	void
 	do_connect(boost::asio::ip::tcp::resolver::results_type results)
 	{
-		XNET_LOG4I("XPEER(%d) %s:%s  CONNECTING", id(), addr().c_str(), port().c_str());
+		LOG4I("XPEER(%d) %s:%s  CONNECTING", id(), addr().c_str(), port().c_str());
 		// Make the connection on the IP address we get from a lookup
 		boost::asio::async_connect(
 			ws_.next_layer().next_layer(),
