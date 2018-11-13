@@ -16,14 +16,16 @@ namespace XNet {
 template <class Server, class Derived>
 class XSocket : public XPeer<Server>
 {
+	typedef XSocket<Server,Derived> This;
+	typedef XPeer<Server> Base;
   public:
 	XSocket(Server &srv, size_t id)
-		: XPeer(srv, id), recv_buffer_(srv.max_buffer_size_)
-		  //, send_buffer_(srv.max_buffer_size_), write_buffer_(srv.max_buffer_size_)
+		: Base(srv, id), recv_buffer_(srv.max_buffer_size())
+		  //, send_buffer_(srv.max_buffer_size()), write_buffer_(srv.max_buffer_size())
 		  ,
 		  write_complete(true)
 	{
-		recv_buffer_.ensureWritable(srv.max_buffer_size_);
+		recv_buffer_.ensureWritable(srv.max_buffer_size());
 	}
 
 	~XSocket()
@@ -253,15 +255,15 @@ class XSocket : public XPeer<Server>
 
 template <class Server>
 class XWorker
-	: public XSocket<Server, XWorker>,
-	  public std::enable_shared_from_this<XWorker>,
+	: public XSocket<Server, XWorker<Server>>,
+	  public std::enable_shared_from_this<XWorker<Server>>,
 	  private boost::noncopyable
 {
-	friend class Server;
-
+	typedef XWorker<Server> This;
+	typedef XSocket<Server, XWorker<Server>> Base;
   public:
 	XWorker(Server &srv, size_t id, boost::asio::ip::tcp::socket sock)
-		: XSocket(srv, MAKE_PEER_ID(PEER_TYPE_TCP, id)), sock_(std::move(sock))
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_TCP, id)), sock_(std::move(sock))
 	{
 	}
 
@@ -289,14 +291,17 @@ class XWorker
 
 template <class Server>
 class XConnector
-	: public XSocket<Server, XConnector>,
-	  public XResolver<Server, XConnector>,
-	  public std::enable_shared_from_this<XConnector>,
+	: public XSocket<Server, XConnector<Server>>,
+	  public XResolver<Server, XConnector<Server>>,
+	  public std::enable_shared_from_this<XConnector<Server>>,
 	  private boost::noncopyable
 {
+	typedef XConnector<Server> This;
+	typedef XSocket<Server, XConnector<Server>> Base;
+	typedef XResolver<Server, XConnector<Server>> Resolver;
   public:
 	XConnector(Server &srv, size_t id, boost::asio::ip::tcp::socket sock)
-		: XSocket(srv, MAKE_PEER_ID(PEER_TYPE_TCP_CLIENT, id)), XResolver(sock.get_executor().context()), sock_(std::move(sock))
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_TCP_CLIENT, id)), Resolver(sock.get_executor().context()), sock_(std::move(sock))
 	{
 	}
 
@@ -327,7 +332,7 @@ class XConnector
 			results.begin(),
 			results.end(),
 			std::bind(
-				&XConnector::on_connect,
+				&This::on_connect,
 				shared_from_this(),
 				std::placeholders::_1));
 	}

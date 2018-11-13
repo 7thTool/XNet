@@ -15,7 +15,7 @@ class XServerT : private boost::noncopyable
 {
 #if XSERVER_PROTOTYPE_TCP 
 typedef XWorker<T> xworker_t; 
-typedef XWorker<T> xconnector_t; 
+typedef XConnector<T> xconnector_t; 
 typedef std::shared_ptr<xworker_t> xworker_ptr; 
 typedef std::weak_ptr<xworker_t> xworker_weak_ptr; 
 typedef std::shared_ptr<xconnector_t> xconnector_ptr; 
@@ -1074,7 +1074,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 #if XSERVER_PROTOTYPE_SSL_WEBSOCKET
 			case XSERVER_SSL_WEBSOCKET:
 			{
-				wss_ptr peer_ptr = std::make_shared<wss_clt_t>(*static_cast<T*>(this), peer_id, std::move(*socket),
+				wss_ptr peer_ptr = std::make_shared<wss_t>(*static_cast<T*>(this), peer_id, std::move(*socket),
 																			  io_ssl_context_);
 				on_io_accept(peer_ptr);
 				peer_ptr->run();

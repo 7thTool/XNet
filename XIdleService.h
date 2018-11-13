@@ -19,7 +19,7 @@ class XIdleService
 {
 #if XSERVER_PROTOTYPE_TCP 
 typedef XWorker<Server> xworker_t; 
-typedef XWorker<Server> xconnector_t; 
+typedef XConnector<Server> xconnector_t; 
 typedef std::shared_ptr<xworker_t> xworker_ptr; 
 typedef std::weak_ptr<xworker_t> xworker_weak_ptr; 
 typedef std::shared_ptr<xconnector_t> xconnector_ptr; 

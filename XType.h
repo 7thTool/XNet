@@ -1,6 +1,50 @@
 #ifndef __H_XTYPE_H__
 #define __H_XTYPE_H__
 
+/*
+* 框架宏： XSERVER_PROTOTYPE
+* 使用说明： 定义XServer服务框架原型类型
+*/
+#define XSERVER_TCP 1				//TCP
+#define XSERVER_HTTP 2				//HTTP/WS
+#define XSERVER_HTTPS 3				//HTTPS/WSS
+#define XSERVER_WEBSOCKET 4			//WS
+#define XSERVER_SSL_WEBSOCKET 5		//WSS
+#define XSERVER_ALL 6				//ALL
+
+#define XSERVER_PROTOTYPE_TCP (XSERVER_PROTOTYPE==XSERVER_ALL || XSERVER_PROTOTYPE==XSERVER_TCP)
+#define XSERVER_PROTOTYPE_HTTP	(XSERVER_PROTOTYPE==XSERVER_ALL || XSERVER_PROTOTYPE==XSERVER_HTTP || XSERVER_PROTOTYPE==XSERVER_HTTPS)
+#define XSERVER_PROTOTYPE_WEBSOCKET (XSERVER_PROTOTYPE==XSERVER_ALL || XSERVER_PROTOTYPE==XSERVER_WEBSOCKET)
+#define XSERVER_PROTOTYPE_SSL_WEBSOCKET (XSERVER_PROTOTYPE==XSERVER_ALL || XSERVER_PROTOTYPE==XSERVER_SSL_WEBSOCKET)
+#define XSERVER_PROTOTYPE_BEAST (XSERVER_PROTOTYPE==XSERVER_ALL || XSERVER_PROTOTYPE==XSERVER_HTTP || XSERVER_PROTOTYPE==XSERVER_HTTPS || XSERVER_PROTOTYPE==XSERVER_WEBSOCKET || XSERVER_PROTOTYPE==XSERVER_SSL_WEBSOCKET)
+
+//#define XSERVER_PROTOTYPE 3
+
+#if XSERVER_PROTOTYPE==XSERVER_ALL
+#define XSERVER_DEFAULT XSERVER_WEBSOCKET
+#else
+#define XSERVER_DEFAULT XSERVER_PROTOTYPE
+#endif
+
+/*
+* PEER宏： PEER_TYPE
+* 使用说明： 定义XServer通信peer类型
+*/
+#define PEER_TYPE_TCP 1
+#define PEER_TYPE_TCP_CLIENT 2
+#define PEER_TYPE_HTTP 3
+#define PEER_TYPE_HTTP_CLIENT 4
+#define PEER_TYPE_HTTPS 5
+#define PEER_TYPE_HTTPS_CLIENT 6
+#define PEER_TYPE_WEBSOCKET 7
+#define PEER_TYPE_WEBSOCKET_CLIENT 8
+#define PEER_TYPE_SSL_WEBSOCKET 9
+#define PEER_TYPE_SSL_WEBSOCKET_CLIENT 10
+
+#define XSERVER_VERSION_MAJOR 1
+#define XSERVER_VERSION_MINOR 1
+#define XSERVER_VERSION "1.1.1"
+
 /*#ifdef _WIN32 
 //定义_WIN32_WINNT 0x0501时，需要使用兼容XP设置
 //#define _WIN32_WINNT 0x0501 
@@ -37,9 +81,36 @@
 #define nullptr 0
 #endif
 
-#include "XExport.h"
-
-#define XSERVER_PROTOTYPE_BEAST (XSERVER_PROTOTYPE==XSERVER_ALL || XSERVER_PROTOTYPE==XSERVER_HTTP || XSERVER_PROTOTYPE==XSERVER_HTTPS || XSERVER_PROTOTYPE==XSERVER_WEBSOCKET || XSERVER_PROTOTYPE==XSERVER_SSL_WEBSOCKET)
+typedef char				x_char_t;
+typedef unsigned char		x_byte_t;
+typedef bool				x_bool_t;
+typedef short				x_short_t;
+typedef unsigned short		x_ushort_t;
+#ifdef WIN32
+typedef __int8				x_int8_t;
+typedef unsigned __int8		x_uint8_t;
+typedef __int16				x_int16_t;
+typedef unsigned __int16	x_uint16_t;
+typedef __int32				x_int32_t;
+typedef unsigned __int32	x_uint32_t;
+typedef __int64				x_int64_t;
+typedef unsigned __int64	x_uint64_t;
+typedef ptrdiff_t			x_int_t;
+#else
+typedef int8_t				x_int8_t;
+typedef uint8_t				x_uint8_t;
+typedef int16_t				x_int16_t;
+typedef uint16_t			x_uint16_t;
+typedef int32_t				x_int32_t;
+typedef uint32_t			x_uint32_t;
+typedef int64_t				x_int64_t;
+typedef uint64_t			x_uint64_t;
+typedef ssize_t				x_int_t;
+#endif//
+typedef size_t	            x_size_t;
+typedef float				x_float_t;
+typedef double				x_double_t;
+typedef void*				x_voidptr_t;
 
 #define PEER_TYPE_MASK			0xff
 #define PEER_TYPE_BITS			8
