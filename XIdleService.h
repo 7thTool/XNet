@@ -51,6 +51,7 @@ typedef std::weak_ptr<wss_t> wss_weak_ptr;
 typedef std::shared_ptr<wss_clt_t> wss_clt_ptr; 
 typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr; 
 #endif
+typedef XIdleService<Server> This;
   public:
 	XIdleService(Server &srv)
 		: server_(srv), service_(), service_work_(service_), timing_wheel_timer_(service_)
@@ -94,22 +95,22 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	void add(xworker_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&on_add_worker, this, peer_ptr));
+		service_.post(boost::bind(&This::on_add_worker, this, peer_ptr));
 	}
 
 	void add(xconnector_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&on_add_connector, this, peer_ptr));
+		service_.post(boost::bind(&This::on_add_connector, this, peer_ptr));
 	}
 
 	void active(xworker_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&on_active_worker, this, peer_ptr));
+		service_.post(boost::bind(&This::on_active_worker, this, peer_ptr));
 	}
 
 	void active(xconnector_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&on_active_connector, this, peer_ptr));
+		service_.post(boost::bind(&This::on_active_connector, this, peer_ptr));
 	}
 
 #endif //
@@ -118,22 +119,22 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	void add(ws_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&on_add_ws, this, peer_ptr));
+		service_.post(boost::bind(&This::on_add_ws, this, peer_ptr));
 	}
 
 	void add(ws_clt_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&on_add_ws_client, this, peer_ptr));
+		service_.post(boost::bind(&This::on_add_ws_client, this, peer_ptr));
 	}
 
 	void active(ws_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&on_active_ws, this, peer_ptr));
+		service_.post(boost::bind(&This::on_active_ws, this, peer_ptr));
 	}
 
 	void active(ws_clt_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&on_active_ws_client, this, peer_ptr));
+		service_.post(boost::bind(&This::on_active_ws_client, this, peer_ptr));
 	}
 
 #endif //
@@ -142,12 +143,12 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	void add(wss_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&on_add_wss, this, peer_ptr));
+		service_.post(boost::bind(&This::on_add_wss, this, peer_ptr));
 	}
 
 	void add(wss_clt_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&on_add_wss_client, this, peer_ptr));
+		service_.post(boost::bind(&This::on_add_wss_client, this, peer_ptr));
 	}
 
 	void active(wss_ptr peer_ptr)
@@ -158,7 +159,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	void active(wss_clt_ptr peer_ptr)
 	{
-		service_.post(boost::bind(&on_active_wss_client, this, peer_ptr));
+		service_.post(boost::bind(&This::on_active_wss_client, this, peer_ptr));
 	}
 
 #endif //
@@ -299,7 +300,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		boost::system::error_code ec;
 		timing_wheel_timer_.cancel(ec);
 		timing_wheel_timer_.expires_from_now(boost::posix_time::seconds(1));
-		timing_wheel_timer_.async_wait(boost::bind(&on_timing_wheel, this, boost::asio::placeholders::error));
+		timing_wheel_timer_.async_wait(boost::bind(&This::on_timing_wheel, this, boost::asio::placeholders::error));
 	}
 
 	void on_timing_wheel(const boost::system::error_code &ec)

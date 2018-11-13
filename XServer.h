@@ -1028,7 +1028,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		//	);
 		std::shared_ptr<boost::asio::ip::tcp::socket> socket = 
 			std::make_shared<boost::asio::ip::tcp::socket>(io_service_->get_service(get_io_index(peer_id)));
-		acceptor->async_accept(*socket, boost::bind(&on_accept, static_cast<T*>(this), boost::asio::placeholders::error, acceptor, type, socket, peer_id));
+		acceptor->async_accept(*socket, boost::bind(&T::on_accept, static_cast<T*>(this), boost::asio::placeholders::error, acceptor, type, socket, peer_id));
 	}
 
 	void on_accept(const boost::system::error_code &ec, const std::shared_ptr<boost::asio::ip::tcp::acceptor> &acceptor, const x_int_t type, const std::shared_ptr<boost::asio::ip::tcp::socket> &socket, const size_t peer_id)
