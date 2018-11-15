@@ -57,7 +57,12 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	{
 	}
 
-	bool start(int io_thread, int work_thread)
+	const char* name() 
+	{
+		return "xserver";
+	}
+
+	bool start(int io_thread, int work_thread, bool idle_thread = true)
 	{
 		bool expected = true;
 		if (!stop_flag_.compare_exchange_strong(expected, false))
@@ -79,9 +84,10 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 		io_service_ = std::make_shared<XIOService<T>>(*static_cast<T*>(this));
 		work_service_ = std::make_shared<XWorkService<T>>(*static_cast<T*>(this));
-		idle_service_ = std::make_shared<XIdleService<T>>(*static_cast<T*>(this));
+		if(idle_thread)
+			idle_service_ = std::make_shared<XIdleService<T>>(*static_cast<T*>(this));
 
-		std::string logfile = log_directory_ + "/xserver";
+		std::string logfile = log_directory_ + pT->name();
 		XLogger::instance().init(logfile);
 
 #if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
@@ -93,8 +99,9 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 		LOG4I("XSERVER t=%d v=%s", XSERVER_PROTOTYPE, XSERVER_VERSION);
 		LOG4I("XSERVER starting io_thread=%d work_thread=%d", io_thread, work_thread);
-
-		idle_service_->start();
+		
+		if(idle_service_)
+			idle_service_->start();
 
 		io_service_->Start(io_thread_num_);
 
@@ -116,7 +123,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		//size_t i;
 		boost::system::error_code ec;
 
-		LOG4I(" stoping");
+		LOG4I("XSERVER stoping");
 
 		//acceptor_.reset();
 
@@ -124,7 +131,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 		io_service_->Stop();
 
-		idle_service_->stop();
+		if(idle_service_)
+			idle_service_->stop();
 
 		{
 			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
@@ -132,7 +140,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 
-		idle_service_.reset();
+		if(idle_service_)
+			idle_service_.reset();
 		work_service_.reset();
 		io_service_.reset();
 		
@@ -224,7 +233,10 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	template <typename F>
 	inline void PostIdle(F f)
 	{
-		idle_service_->Post(f);
+		if(idle_service_)
+			idle_service_->Post(f);
+		else 
+			BOOST_ASSERT(false);
 	}
 
 	size_t connect(const x_char_t *addr, const x_ushort_t port, const x_int_t type, const x_size_t io_channel, const x_size_t work_channel)
@@ -563,7 +575,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			peer_map_[peer_ptr->id()] = xworker_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
-		idle_service_->add(peer_ptr);
+		if(idle_service_)
+			idle_service_->add(peer_ptr);
 	}
 
 	void on_io_connect(xconnector_ptr peer_ptr)
@@ -577,13 +590,15 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			peer_map_[peer_ptr->id()] = xconnector_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
-		idle_service_->add(peer_ptr);
+		if(idle_service_)
+			idle_service_->add(peer_ptr);
 		//	}
 	}
 
 	void on_io_read(xworker_ptr peer_ptr, XRWBuffer &buffer)
 	{
-		idle_service_->active(peer_ptr);
+		if(idle_service_)
+			idle_service_->active(peer_ptr);
 		buffer.clear();
 		peer_ptr->do_read();
 	}
@@ -614,7 +629,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	void on_io_read(xconnector_ptr peer_ptr, XRWBuffer &buffer)
 	{
-		idle_service_->active(peer_ptr);
+		if(idle_service_)
+			idle_service_->active(peer_ptr);
 		buffer.clear();
 		peer_ptr->do_read();
 	}
@@ -680,7 +696,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			peer_map_[peer_ptr->id()] = ws_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
-		idle_service_->add(peer_ptr);
+		if(idle_service_)
+			idle_service_->add(peer_ptr);
 	}
 
 	void on_io_upgrade(wss_ptr peer_ptr)
@@ -691,7 +708,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			peer_map_[peer_ptr->id()] = wss_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
-		idle_service_->add(peer_ptr);
+		if(idle_service_)
+			idle_service_->add(peer_ptr);
 	}
 #endif //
 
@@ -703,7 +721,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			peer_map_[peer_ptr->id()] = ws_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
-		idle_service_->add(peer_ptr);
+		if(idle_service_)
+			idle_service_->add(peer_ptr);
 	}
 
 	void on_io_connect(ws_clt_ptr peer_ptr)
@@ -717,7 +736,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			peer_map_[peer_ptr->id()] = ws_clt_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
-		idle_service_->add(peer_ptr);
+		if(idle_service_)
+			idle_service_->add(peer_ptr);
 		//	}
 	}
 #endif //
@@ -730,7 +750,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			peer_map_[peer_ptr->id()] = wss_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
-		idle_service_->add(peer_ptr);
+		if(idle_service_)
+			idle_service_->add(peer_ptr);
 	}
 
 	void on_io_connect(wss_clt_ptr peer_ptr)
@@ -744,7 +765,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			peer_map_[peer_ptr->id()] = wss_clt_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
-		idle_service_->add(peer_ptr);
+		if(idle_service_)
+			idle_service_->add(peer_ptr);
 		//	}
 	}
 
@@ -822,7 +844,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		{
 			return;
 		}
-		idle_service_->active(peer_ptr);
+		if(idle_service_)
+			idle_service_->active(peer_ptr);
 	}
 
 	void on_io_read(ws_ptr peer_ptr, const std::string &buffer)
@@ -832,7 +855,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	void on_io_write(ws_ptr peer_ptr, const std::string &buffer)
 	{
-		idle_service_->active(peer_ptr);
+		if(idle_service_)
+			idle_service_->active(peer_ptr);
 	}
 
 	void on_close(ws_t *peer_ptr)
@@ -856,7 +880,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	void on_io_activity(ws_clt_ptr peer_ptr)
 	{
-		idle_service_->active(peer_ptr);
+		if(idle_service_)
+			idle_service_->active(peer_ptr);
 	}
 
 	void on_io_read(ws_clt_ptr peer_ptr, const std::string &buffer)
@@ -866,7 +891,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	void on_io_write(ws_clt_ptr peer_ptr, const std::string &buffer)
 	{
-		idle_service_->active(peer_ptr);
+		if(idle_service_)
+			idle_service_->active(peer_ptr);
 	}
 
 	void on_close(ws_clt_t *peer_ptr)
@@ -893,7 +919,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	void on_io_activity(wss_ptr peer_ptr)
 	{
-		idle_service_->active(peer_ptr);
+		if(idle_service_)
+			idle_service_->active(peer_ptr);
 	}
 
 	void on_io_read(wss_ptr peer_ptr, const std::string &buffer)
@@ -903,7 +930,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	void on_io_write(wss_ptr peer_ptr, const std::string &buffer)
 	{
-		idle_service_->active(peer_ptr);
+		if(idle_service_)
+			idle_service_->active(peer_ptr);
 	}
 
 	void on_close(wss_t *peer_ptr)
@@ -927,7 +955,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	void on_io_activity(wss_clt_ptr peer_ptr)
 	{
-		idle_service_->active(peer_ptr);
+		if(idle_service_)
+			idle_service_->active(peer_ptr);
 	}
 
 	void on_io_read(wss_clt_ptr peer_ptr, const std::string &buffer)
@@ -937,7 +966,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	void on_io_write(wss_clt_ptr peer_ptr, const std::string &buffer)
 	{
-		idle_service_->active(peer_ptr);
+		if(idle_service_)
+			idle_service_->active(peer_ptr);
 	}
 
 	void on_close(wss_clt_t *peer_ptr)

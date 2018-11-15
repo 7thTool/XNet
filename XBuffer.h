@@ -3,7 +3,8 @@
 
 #include "XType.h"
 
-namespace XNet {
+namespace XNet
+{
 
 template <class Server>
 class XBuffer : private boost::noncopyable
@@ -72,6 +73,224 @@ class XBuffer : private boost::noncopyable
   protected:
 	std::string read_buffer_;
 	std::deque<std::string> write_buffer_;
+};
+
+typedef union {
+	x_int64_t n64;
+	struct
+	{
+		x_int32_t n32_h;
+		x_int32_t n32_l;
+	};
+} x_cov64_t;
+
+/*
+* 类名：x_r_buffer
+* 说明：通讯内存只读处理类
+*/
+
+class x_r_buffer
+{
+  public:
+	explicit x_r_buffer(const x_char_t *buf, x_size_t len, bool ne = false)
+		: buffer_(buf), size_(len), ne_(ne), readerIndex_(0)
+	{
+		BOOST_ASSERT(readable() == size_);
+	}
+
+	void swap(x_r_buffer &rhs)
+	{
+		std::swap(buffer_, rhs.buffer_);
+		std::swap(size_, rhs.size_);
+		std::swap(readerIndex_, rhs.readerIndex_);
+	}
+
+	void reset()
+	{
+		readerIndex_ = 0;
+	}
+
+	x_size_t size() const
+	{
+		return size_ - readerIndex_;
+	}
+
+	x_size_t readable() const
+	{
+		return size_ - readerIndex_;
+	}
+
+	const x_char_t *data() const
+	{
+		return begin() + readerIndex_;
+	}
+
+	const x_char_t *reader() const
+	{
+		return begin() + readerIndex_;
+	}
+
+	void retrieve(x_size_t len)
+	{
+		BOOST_ASSERT(len <= readable());
+		if (len < readable())
+		{
+			readerIndex_ += len;
+		}
+		else
+		{
+			reset();
+		}
+	}
+
+	void retrieveInt64()
+	{
+		retrieve(sizeof(int64_t));
+	}
+
+	void retrieveInt32()
+	{
+		retrieve(sizeof(int32_t));
+	}
+
+	void retrieveInt16()
+	{
+		retrieve(sizeof(int16_t));
+	}
+
+	void retrieveInt8()
+	{
+		retrieve(sizeof(int8_t));
+	}
+
+	x_char_t *read(x_char_t *buf, x_size_t len)
+	{
+		peek(buf, len);
+		retrieve(len);
+		return buf;
+	}
+
+	template <class Y>
+	Y &read(Y &rhs)
+	{
+		read(&rhs, sizeof(Y));
+		return rhs;
+	}
+
+	x_int64_t readInt64(bool ne)
+	{
+		x_int64_t result = peekInt64(ne);
+		retrieveInt64();
+		return result;
+	}
+
+	x_int32_t readInt32(bool ne)
+	{
+		x_int32_t result = peekInt32(ne);
+		retrieveInt32();
+		return result;
+	}
+
+	x_int16_t readInt16(bool ne)
+	{
+		x_int16_t result = peekInt16(ne);
+		retrieveInt16();
+		return result;
+	}
+
+	x_int8_t readInt8(bool ne)
+	{
+		x_int8_t result = peekInt8();
+		retrieveInt8();
+		return result;
+	}
+
+	x_char_t *peek(x_char_t *buf, x_size_t len)
+	{
+		BOOST_ASSERT(readable() >= len);
+		::memcpy(buf, reader(), len);
+		return buf;
+	}
+	template <class Y>
+	Y &peek(Y &rhs)
+	{
+		peek(&rhs, sizeof(Y));
+		return rhs;
+	}
+	x_int64_t peekInt64(bool ne) const
+	{
+		BOOST_ASSERT(readable() >= sizeof(x_int64_t));
+		if (ne_ && !ne)
+		{
+			x_cov64_t x;
+			::memcpy(&x.n64, reader(), sizeof(x_int64_t));
+			x.n32_h = boost::asio::detail::socket_ops::network_to_host_long(x.n32_h);
+			x.n32_l = boost::asio::detail::socket_ops::network_to_host_long(x.n32_l);
+			return x.n64;
+		}
+		else if (!ne_ && ne)
+		{
+			x_cov64_t x;
+			::memcpy(&x.n64, reader(), sizeof(x_int64_t));
+			x.n32_h = boost::asio::detail::socket_ops::host_to_network_long(x.n32_h);
+			x.n32_l = boost::asio::detail::socket_ops::host_to_network_long(x.n32_l);
+			return x.n64;
+		}
+		x_int64_t x = 0;
+		::memcpy(&x, reader(), sizeof(x_int64_t));
+		return x;
+	}
+
+	x_int32_t peekInt32(bool ne) const
+	{
+		BOOST_ASSERT(readable() >= sizeof(x_int32_t));
+		x_int32_t x = 0;
+		::memcpy(&x, reader(), sizeof(x_int32_t));
+		if (ne_ && !ne)
+		{
+			x = boost::asio::detail::socket_ops::network_to_host_long(x);
+		}
+		else if (!ne_ && ne)
+		{
+			x = boost::asio::detail::socket_ops::host_to_network_long(x);
+		}
+		return x;
+	}
+
+	x_int16_t peekInt16(bool ne) const
+	{
+		BOOST_ASSERT(readable() >= sizeof(x_int16_t));
+		x_int16_t x = 0;
+		::memcpy(&x, reader(), sizeof(x_int16_t));
+		if (ne_ && !ne)
+		{
+			x = boost::asio::detail::socket_ops::network_to_host_short(x);
+		}
+		else if (!ne_ && ne)
+		{
+			x = boost::asio::detail::socket_ops::host_to_network_short(x);
+		}
+		return x;
+	}
+
+	x_int8_t peekInt8() const
+	{
+		BOOST_ASSERT(readable() >= sizeof(x_int8_t));
+		x_int8_t x = *reader();
+		return x;
+	}
+
+  protected:
+	const x_char_t *begin() const
+	{
+		return buffer_;
+	}
+
+  protected:
+	const x_char_t *buffer_;
+	x_size_t size_;
+	bool ne_;
+	x_size_t readerIndex_;
 };
 
 /// x initial reserve (size) bytes read write buffer class
@@ -494,6 +713,6 @@ class XRWBuffer : private boost::noncopyable
 	size_t writerIndex_;
 };
 
-}
+} // namespace XNet
 
 #endif //__H_XBUFFER_H__
