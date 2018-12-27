@@ -108,6 +108,55 @@ protected:
 	//boost::asio::ip::tcp::resolver::query query_;
 };
 
+template<class Server, class Derived>
+class XConnectPeer : public XPeer<Server>, public XResolver<Server, Derived>
+{
+	typedef XPeer<Server> Base;
+public:
+	typedef XResolver<Server, Derived> Resolver;
+public:
+	XConnectPeer(Server &srv, size_t id, boost::asio::io_context &io_context)
+		: Base(srv, id), Resolver(io_context), connect_timeout_(0)
+	{
+	}
+
+	~XConnectPeer()
+	{
+	}
+
+	inline Derived&
+		derived()
+	{
+		return static_cast<Derived&>(*this);
+	}
+
+	inline void set_connect_timeout(size_t millis) { connect_timeout_ = millis; }
+	inline size_t get_connect_timeout() { return connect_timeout_; }
+
+	void on_fail(boost::system::error_code ec, char const *what)
+	{
+		Base::on_fail(ec, what);
+		if (connect_timeout_) {
+			boost::asio::deadline_timer * timer = server_.CreateIOTimer(id_);
+			server_.PostIOTimer(timer, connect_timeout_,
+				std::bind(
+					&Derived::on_reconnect,
+					derived().shared_from_this(), timer));
+		}
+	}
+protected:
+	void on_reconnect(boost::asio::deadline_timer * timer)
+	{
+		if (timer) {
+			server_.KillIOTimer(timer);
+		}
+		derived().run(derived().addr(), derived().port());
+	}
+
+protected:
+	size_t connect_timeout_;
+};
+
 }
 
 #endif//__H_XPEER_H__

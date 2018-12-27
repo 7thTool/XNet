@@ -269,7 +269,7 @@ class XWorker
 
 	~XWorker()
 	{
-		server().on_close(this);
+		server().on_io_close(this);
 	}
 
 	boost::asio::ip::tcp::socket &sock()
@@ -307,7 +307,7 @@ class XConnector
 
 	~XConnector()
 	{
-		server().on_close(this);
+		server().on_io_close(this);
 	}
 
 	boost::asio::ip::tcp::socket &sock()

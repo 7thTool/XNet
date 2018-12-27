@@ -16,7 +16,6 @@
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/signal_set.hpp>
-#include <boost/asio/ssl/stream.hpp>
 #include <boost/asio/strand.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/make_unique.hpp>
@@ -30,8 +29,11 @@
 #include <thread>
 #include <vector>
 
+#if XSERVER_PROTOTYPE_SSL
+#include <boost/asio/ssl/stream.hpp>
 #include "detect_ssl.hpp"
 #include "ssl_stream.hpp"
+#endif//
 
 #endif //
 
@@ -160,8 +162,10 @@ class websocket_session : public XPeer<Server>
 	// Start the asynchronous operation
 	template <class Body, class Allocator>
 	void
-	do_accept(boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> req)
+	do_accept(boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req)
 	{
+		server().on_io_preaccept(derived().shared_from_this(), std::move(req));
+
 		// Set the control callback. This will be called
 		// on every incoming ping, pong, and close frame.
 		control_callback_ = std::bind(
@@ -447,7 +451,7 @@ class plain_websocket_session
 
 	~plain_websocket_session()
 	{
-		server().on_close(this);
+		server().on_io_close(this);
 	}
 
 	// Called by the base class
@@ -465,7 +469,7 @@ class plain_websocket_session
 	// Start the asynchronous operation
 	template <class Body, class Allocator>
 	void
-	run(boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> req)
+	run(boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req)
 	{
 		// Run the timer. The timer is operated
 		// continuously, this simplifies the code.
@@ -575,7 +579,7 @@ class ssl_websocket_session
 
 	~ssl_websocket_session()
 	{
-		server().on_close(this);
+		server().on_io_close(this);
 	}
 
 	// Called by the base class
@@ -605,7 +609,7 @@ class ssl_websocket_session
 	// Start the asynchronous operation
 	template <class Body, class Allocator>
 	void
-	run(boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> req)
+	run(boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req)
 	{
 		// Run the timer. The timer is operated
 		// continuously, this simplifies the code.
@@ -694,22 +698,24 @@ class ssl_websocket_session
 
 template <class Server, class Body, class Allocator>
 void upgrade_websocket_session(Server &srv, size_t id,
-							   boost::asio::ip::tcp::socket socket,
-							   boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> req)
+							   boost::asio::ip::tcp::socket &&socket,
+							   boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req)
 {
-	std::make_shared<plain_websocket_session<Server>>(srv, id,
-											  std::move(socket))
-		->run(std::move(req));
+	std::shared_ptr<plain_websocket_session<Server>> ws_ptr = std::make_shared<plain_websocket_session<Server>>(srv, id,
+											  std::move(socket));
+	srv.on_io_upgrade(ws_ptr);
+	ws_ptr->run(std::move(req));
 }
 
 template <class Server, class Body, class Allocator>
 void upgrade_websocket_session(Server &srv, size_t id,
-							   ssl_stream<boost::asio::ip::tcp::socket> stream,
-							   boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> req)
+							   ssl_stream<boost::asio::ip::tcp::socket> &&stream,
+							   boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req)
 {
-	std::make_shared<ssl_websocket_session<Server>>(srv, id,
-											std::move(stream))
-		->run(std::move(req));
+	std::shared_ptr<ssl_websocket_session<Server>> wss_ptr = std::make_shared<ssl_websocket_session<Server>>(srv, id,
+											std::move(stream));
+	srv.on_io_upgrade(wss_ptr);
+	wss_ptr->run(std::move(req));
 }
 
 //------------------------------------------------------------------------------
@@ -1029,7 +1035,7 @@ class plain_http_session
 
 	~plain_http_session()
 	{
-		server().on_close(this);
+		server().on_io_close(this);
 	}
 
 	// Called by the base class
@@ -1119,7 +1125,7 @@ class ssl_http_session
 
 	~ssl_http_session()
 	{
-		server().on_close(this);
+		server().on_io_close(this);
 	}
 
 	bool is_open()
@@ -1313,11 +1319,9 @@ class detect_session
 // WebSocket client
 template <class Server, class Derived>
 class websocket_client_session
-	: public XPeer<Server>,
-	  public XResolver<Server, Derived>
+	: public XConnectPeer<Server, Derived>
 {
-	typedef XPeer<Server> Base;
-	typedef XResolver<Server, Derived> Resolver;
+	typedef XConnectPeer<Server, Derived> Base;
 	boost::beast::multi_buffer read_buffers_; //当前收到的包
 	//std::string read_buffer_; //buffer_ => string
 	//x_packet_t packet_;
@@ -1333,7 +1337,7 @@ class websocket_client_session
   public:
 	// Resolver and socket require an io_context
 	explicit websocket_client_session(Server &srv, size_t id, boost::asio::io_context &io_context)
-		: Base(srv, id), Resolver(io_context)
+		: Base(srv, id, io_context)
 	{
 	}
 	~websocket_client_session()
@@ -1616,7 +1620,7 @@ class plain_websocket_client_session
 
 	~plain_websocket_client_session()
 	{
-		server().on_close(this);
+		server().on_io_close(this);
 	}
 
 	boost::beast::websocket::stream<boost::asio::ip::tcp::socket> &
@@ -1673,7 +1677,7 @@ class ssl_websocket_client_session
 
 	~ssl_websocket_client_session()
 	{
-		server().on_close(this);
+		server().on_io_close(this);
 	}
 
 	// Called by the base class
