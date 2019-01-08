@@ -1,12 +1,12 @@
-#ifndef __H_XSOCKET_H__
-#define __H_XSOCKET_H__
+#ifndef __H_XNET_XSOCKET_HPP__
+#define __H_XNET_XSOCKET_HPP__
 
 #pragma once
 
-#include "XType.h"
-#include "XBuffer.h"
-#include "XPeer.h"
-#include "XLogger.h"
+#include "XType.hpp"
+#include "XBuffer.hpp"
+#include "XPeer.hpp"
+#include "XLogger.hpp"
 
 namespace XNet {
 
@@ -363,4 +363,4 @@ class XConnector
 
 }
 
-#endif //__H_XSOCKET_H__
+#endif //__H_XNET_XSOCKET_HPP__

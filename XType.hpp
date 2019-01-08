@@ -1,5 +1,5 @@
-#ifndef __H_XTYPE_H__
-#define __H_XTYPE_H__
+#ifndef __H_XNET_XTYPE_HPP__
+#define __H_XNET_XTYPE_HPP__
 
 /*
 * 框架宏： XSERVER_PROTOTYPE
@@ -122,4 +122,4 @@ typedef void*				x_voidptr_t;
 #define PEER_ID(id)				((size_t)((size_t)(id) & PEER_ID_MASK))
 #define MAKE_PEER_ID(type,id) 	((size_t)(((size_t)(type) << PEER_ID_BITS) | PEER_ID(id)))
 
-#endif //__H_X_TYPE_H__
+#endif //__H_XNET_X_TYPE_HPP__

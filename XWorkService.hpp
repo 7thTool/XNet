@@ -1,5 +1,5 @@
-#ifndef __H_XWORKSERVICE_H__
-#define __H_XWORKSERVICE_H__
+#ifndef __H_XNET_XWORKSERVICE_HPP__
+#define __H_XNET_XWORKSERVICE_HPP__
 
 #include <set>
 #include <string>
@@ -128,4 +128,4 @@ class XWorkService
 	//boost::thread_group WorkThreadGroup_;
 };
 
-#endif //__H_XWORKSERVICE_H__
+#endif //__H_XNET_XWORKSERVICE_HPP__

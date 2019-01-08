@@ -1,17 +1,17 @@
-#ifndef __H_XSERVER_H__
-#define __H_XSERVER_H__
+#ifndef __H_XNET_XSERVER_HPP__
+#define __H_XNET_XSERVER_HPP__
 
-#include "XType.h"
-#include "XIOService.h"
-#include "XWorkService.h"
-#include "XIdleService.h"
-#include "XSocket.h"
-#include "XBeast.h"
-#include "XService.h"
+#include "XType.hpp"
+#include "XIOService.hpp"
+#include "XWorkService.hpp"
+#include "XIdleService.hpp"
+#include "XSocket.hpp"
+#include "XBeast.hpp"
+#include "XService.hpp"
 
 namespace XNet {
 
-template<class T>
+template<class T, class TListener>
 class XServerT : public XServiceT<T>
 {
 	typedef XServiceT<T> base;
@@ -62,27 +62,27 @@ public:
 	#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
 		template <class Body, class Allocator>
 		void on_ws_preaccept(ws_ptr peer_ptr, boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req) {}
-		void on_ws_read(ws_ptr peer_ptr, const std::string &buffer) {}
-		void on_ws_write(ws_ptr peer_ptr, const std::string &buffer) {}
+		void on_ws_read(ws_ptr peer_ptr, std::string &buffer) {}
+		void on_ws_write(ws_ptr peer_ptr, std::string &buffer) {}
 		void on_ws_close(ws_t *peer_ptr) {}
-		void on_ws_clt_read(ws_clt_ptr peer_ptr, const std::string &buffer) {}
-		void on_ws_clt_write(ws_clt_ptr peer_ptr, const std::string &buffer) {}
+		void on_ws_clt_read(ws_clt_ptr peer_ptr, std::string &buffer) {}
+		void on_ws_clt_write(ws_clt_ptr peer_ptr, std::string &buffer) {}
 		void on_ws_clt_close(ws_clt_t *peer_ptr) {}
 	#endif
 	#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
 		template <class Body, class Allocator>
 		void
 		on_wss_preaccept(wss_ptr peer_ptr, boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req) {}
-		void on_wss_read(wss_ptr peer_ptr, const std::string &buffer) {}
-		void on_wss_write(wss_ptr peer_ptr, const std::string &buffer) {}
+		void on_wss_read(wss_ptr peer_ptr, std::string &buffer) {}
+		void on_wss_write(wss_ptr peer_ptr, std::string &buffer) {}
 		void on_wss_close(wss_t *peer_ptr) {}
-		void on_wss_clt_read(wss_clt_ptr peer_ptr, const std::string &buffer) {}
-		void on_wss_clt_write(wss_clt_ptr peer_ptr, const std::string &buffer) {}
+		void on_wss_clt_read(wss_clt_ptr peer_ptr, std::string &buffer) {}
+		void on_wss_clt_write(wss_clt_ptr peer_ptr, std::string &buffer) {}
 		void on_wss_clt_close(wss_clt_t *peer_ptr) {}
 	#endif
 	};
 public:
-	XServerT(Listener* listener = nullptr)
+	XServerT(TListener* listener = nullptr)
 		: base(), listener_(listener)
 	{
 	}
@@ -96,8 +96,8 @@ public:
 		return "xserver";
 	}
 
-	inline void set_listener(Listener* listener) { listener_ = listener; }
-	inline Listener* listener() { return listener_; }
+	inline void set_listener(TListener* listener) { listener_ = listener; }
+	inline TListener* listener() { return listener_; }
 
 #if XSERVER_PROTOTYPE_TCP
 	void on_io_accept(xworker_ptr peer_ptr)
@@ -234,12 +234,12 @@ public:
 		listener_->on_ws_preaccept(peer_ptr, std::move(req));
 	}
 
-	void on_io_read(ws_ptr peer_ptr, const std::string &buffer)
+	void on_io_read(ws_ptr peer_ptr, std::string &buffer)
 	{
 		listener_->on_ws_read(peer_ptr, buffer);
 	}
 
-	void on_io_write(ws_ptr peer_ptr, const std::string &buffer)
+	void on_io_write(ws_ptr peer_ptr, std::string &buffer)
 	{
 		listener_->on_ws_write(peer_ptr, buffer);
 	}
@@ -250,13 +250,13 @@ public:
 		listener_->on_ws_close(peer_ptr);
 	}
 
-	void on_io_read(ws_clt_ptr peer_ptr, const std::string &buffer)
+	void on_io_read(ws_clt_ptr peer_ptr, std::string &buffer)
 	{
 		base::on_io_read(peer_ptr, buffer);
 		listener_->on_ws_clt_read(peer_ptr, buffer);
 	}
 
-	void on_io_write(ws_clt_ptr peer_ptr, const std::string &buffer)
+	void on_io_write(ws_clt_ptr peer_ptr, std::string &buffer)
 	{
 		base::on_io_write(peer_ptr, buffer);
 		listener_->on_ws_clt_write(peer_ptr, buffer);
@@ -277,12 +277,12 @@ public:
 		listener_->on_wss_preaccept(peer_ptr, std::move(req));
 	}
 
-	void on_io_read(wss_ptr peer_ptr, const std::string &buffer)
+	void on_io_read(wss_ptr peer_ptr, std::string &buffer)
 	{
 		listener_->on_wss_read(peer_ptr, buffer);
 	}
 
-	void on_io_write(wss_ptr peer_ptr, const std::string &buffer)
+	void on_io_write(wss_ptr peer_ptr, std::string &buffer)
 	{
 		listener_->on_wss_write(peer_ptr, buffer);
 	}
@@ -293,13 +293,13 @@ public:
 		listener_->on_wss_close(peer_ptr);
 	}
 
-	void on_io_read(wss_clt_ptr peer_ptr, const std::string &buffer)
+	void on_io_read(wss_clt_ptr peer_ptr, std::string &buffer)
 	{
 		base::on_io_read(peer_ptr, buffer);
 		listener_->on_wss_clt_read(peer_ptr, buffer);
 	}
 
-	void on_io_write(wss_clt_ptr peer_ptr, const std::string &buffer)
+	void on_io_write(wss_clt_ptr peer_ptr, std::string &buffer)
 	{
 		base::on_io_write(peer_ptr, buffer);
 		listener_->on_wss_clt_write(peer_ptr, buffer);
@@ -313,9 +313,9 @@ public:
 #endif //
 
 protected:
-	Listener* listener_;
+	TListener* listener_;
 };
 
 }
 
-#endif //__H_XSERVER_H__
+#endif //__H_XNET_XSERVER_HPP__

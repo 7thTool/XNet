@@ -1,7 +1,7 @@
-#ifndef __H_XBUFFER_H__
-#define __H_XBUFFER_H__
+#ifndef __H_XNET_XBUFFER_HPP__
+#define __H_XNET_XBUFFER_HPP__
 
-#include "XType.h"
+#include "XType.hpp"
 
 namespace XNet
 {
@@ -715,4 +715,4 @@ class XRWBuffer : private boost::noncopyable
 
 } // namespace XNet
 
-#endif //__H_XBUFFER_H__
+#endif //__H_XNET_XBUFFER_HPP__

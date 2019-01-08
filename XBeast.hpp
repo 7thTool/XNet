@@ -1,11 +1,11 @@
-#ifndef __H_XBEAST_H__
-#define __H_XBEAST_H__
+#ifndef __H_XNET_XBEAST_HPP__
+#define __H_XNET_XBEAST_HPP__
 
 #pragma once
 
-#include "XType.h"
-#include "XUtil.h"
-#include "XPeer.h"
+#include "XType.hpp"
+#include "XUtil.hpp"
+#include "XPeer.hpp"
 
 #if XSERVER_PROTOTYPE_BEAST
 
@@ -168,12 +168,12 @@ class websocket_session : public XPeer<Server>
 
 		// Set the control callback. This will be called
 		// on every incoming ping, pong, and close frame.
-		control_callback_ = std::bind(
+		/*control_callback_ = std::bind(
 			&Derived::on_control_callback,
 			this,
 			std::placeholders::_1,
 			std::placeholders::_2);
-		derived().ws().control_callback(control_callback_);
+		derived().ws().control_callback(control_callback_);*/
 
 		// Set the timer
 		//timer_.expires_after(std::chrono::seconds(15));
@@ -193,12 +193,12 @@ class websocket_session : public XPeer<Server>
 	{
 		// Set the control callback. This will be called
 		// on every incoming ping, pong, and close frame.
-		control_callback_ = std::bind(
+		/*control_callback_ = std::bind(
 			&Derived::on_control_callback,
 			this,
 			std::placeholders::_1,
 			std::placeholders::_2);
-		derived().ws().control_callback(control_callback_);
+		derived().ws().control_callback(control_callback_);*/
 
 		// Set the timer
 		//timer_.expires_after(std::chrono::seconds(15));
@@ -326,6 +326,26 @@ class websocket_session : public XPeer<Server>
 		boost::beast::string_view payload)
 	{
 		boost::ignore_unused(kind, payload);
+
+		switch(kind)
+		{
+		case boost::beast::websocket::frame_type::ping:
+		{
+			//
+		}
+		break;
+		case boost::beast::websocket::frame_type::pong:
+		{
+			//
+		}
+		break;
+		case boost::beast::websocket::frame_type::close:
+		{
+			return;
+		}
+		default:
+		break;
+		}
 
 		// Note that there is activity
 		derived().activity();
@@ -1738,4 +1758,4 @@ class ssl_websocket_client_session
 
 }
 
-#endif //__H_XBEAST_H__
+#endif //__H_XNET_XBEAST_HPP__

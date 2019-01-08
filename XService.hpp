@@ -1,12 +1,12 @@
-#ifndef __H_XSERVICE_H__
-#define __H_XSERVICE_H__
+#ifndef __H_XNET_XSERVICE_HPP__
+#define __H_XNET_XSERVICE_HPP__
 
-#include "XType.h"
-#include "XIOService.h"
-#include "XWorkService.h"
-#include "XIdleService.h"
-#include "XSocket.h"
-#include "XBeast.h"
+#include "XType.hpp"
+#include "XIOService.hpp"
+#include "XWorkService.hpp"
+#include "XIdleService.hpp"
+#include "XSocket.hpp"
+#include "XBeast.hpp"
 
 namespace XNet {
 
@@ -739,11 +739,11 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	{
 	}
 
-	void on_io_read(ws_ptr peer_ptr, const std::string &buffer)
+	void on_io_read(ws_ptr peer_ptr, std::string &buffer)
 	{
 	}
 
-	void on_io_write(ws_ptr peer_ptr, const std::string &buffer)
+	void on_io_write(ws_ptr peer_ptr, std::string &buffer)
 	{
 	}
 
@@ -770,11 +770,11 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	{
 	}
 
-	void on_io_read(ws_clt_ptr peer_ptr, const std::string &buffer)
+	void on_io_read(ws_clt_ptr peer_ptr, std::string &buffer)
 	{
 	}
 
-	void on_io_write(ws_clt_ptr peer_ptr, const std::string &buffer)
+	void on_io_write(ws_clt_ptr peer_ptr, std::string &buffer)
 	{
 	}
 
@@ -811,11 +811,11 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	{
 	}
 
-	void on_io_read(wss_ptr peer_ptr, const std::string &buffer)
+	void on_io_read(wss_ptr peer_ptr, std::string &buffer)
 	{
 	}
 
-	void on_io_write(wss_ptr peer_ptr, const std::string &buffer)
+	void on_io_write(wss_ptr peer_ptr, std::string &buffer)
 	{
 	}
 
@@ -842,11 +842,11 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	{
 	}
 
-	void on_io_read(wss_clt_ptr peer_ptr, const std::string &buffer)
+	void on_io_read(wss_clt_ptr peer_ptr, std::string &buffer)
 	{
 	}
 
-	void on_io_write(wss_clt_ptr peer_ptr, const std::string &buffer)
+	void on_io_write(wss_clt_ptr peer_ptr, std::string &buffer)
 	{
 	}
 
@@ -1010,4 +1010,4 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 }
 
-#endif //__H_XSERVICE_H__
+#endif //__H_XNET_XSERVICE_HPP__

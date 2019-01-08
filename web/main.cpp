@@ -1,7 +1,9 @@
-#include "XNet"
+#include "XServer.hpp"
 using namespace XNet;
 
-class XServer : public XServerT<XServer>
+class XServer 
+: public XServerT<XServer,XServer>
+, public XServerT<XServer,XServer>::Listener
 {
 
 };
@@ -9,7 +11,7 @@ class XServer : public XServerT<XServer>
 int main(int argc, char* argv[])
 {
 	XServer server;
-	server.start(5, 5);
+	server.start(5);
 	//server.listen(std::atoi(argv[1]));
 	getchar();
 	server.stop();

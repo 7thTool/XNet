@@ -1,12 +1,12 @@
-#ifndef __H_XWORKSERVER_H__
-#define __H_XWORKSERVER_H__
+#ifndef __H_XNET_XWORKSERVER_HPP__
+#define __H_XNET_XWORKSERVER_HPP__
 
-#include "XType.h"
-#include "XIOService.h"
-#include "XWorkService.h"
-#include "XIdleService.h"
-#include "XSocket.h"
-#include "XBeast.h"
+#include "XType.hpp"
+#include "XIOService.hpp"
+#include "XWorkService.hpp"
+#include "XIdleService.hpp"
+#include "XSocket.hpp"
+#include "XBeast.hpp"
 
 namespace XNet {
 
@@ -853,12 +853,12 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			idle_service_->active(peer_ptr);
 	}
 
-	void on_io_read(ws_ptr peer_ptr, const std::string &buffer)
+	void on_io_read(ws_ptr peer_ptr, std::string &buffer)
 	{
 		peer_ptr->do_read();
 	}
 
-	void on_io_write(ws_ptr peer_ptr, const std::string &buffer)
+	void on_io_write(ws_ptr peer_ptr, std::string &buffer)
 	{
 		if(idle_service_)
 			idle_service_->active(peer_ptr);
@@ -889,12 +889,12 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			idle_service_->active(peer_ptr);
 	}
 
-	void on_io_read(ws_clt_ptr peer_ptr, const std::string &buffer)
+	void on_io_read(ws_clt_ptr peer_ptr, std::string &buffer)
 	{
 		peer_ptr->do_read();
 	}
 
-	void on_io_write(ws_clt_ptr peer_ptr, const std::string &buffer)
+	void on_io_write(ws_clt_ptr peer_ptr, std::string &buffer)
 	{
 		if(idle_service_)
 			idle_service_->active(peer_ptr);
@@ -928,12 +928,12 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			idle_service_->active(peer_ptr);
 	}
 
-	void on_io_read(wss_ptr peer_ptr, const std::string &buffer)
+	void on_io_read(wss_ptr peer_ptr, std::string &buffer)
 	{
 		peer_ptr->do_read();
 	}
 
-	void on_io_write(wss_ptr peer_ptr, const std::string &buffer)
+	void on_io_write(wss_ptr peer_ptr, std::string &buffer)
 	{
 		if(idle_service_)
 			idle_service_->active(peer_ptr);
@@ -964,12 +964,12 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			idle_service_->active(peer_ptr);
 	}
 
-	void on_io_read(wss_clt_ptr peer_ptr, const std::string &buffer)
+	void on_io_read(wss_clt_ptr peer_ptr, std::string &buffer)
 	{
 		peer_ptr->do_read();
 	}
 
-	void on_io_write(wss_clt_ptr peer_ptr, const std::string &buffer)
+	void on_io_write(wss_clt_ptr peer_ptr, std::string &buffer)
 	{
 		if(idle_service_)
 			idle_service_->active(peer_ptr);
@@ -1155,4 +1155,4 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 }
 
-#endif //__H_XWORKSERVER_H__
+#endif //__H_XNET_XWORKSERVER_HPP__

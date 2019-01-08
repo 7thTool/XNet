@@ -1,12 +1,12 @@
-#ifndef __H_XIDLESERVICE_H_
-#define __H_XIDLESERVICE_H_
+#ifndef __H_XNET_XIDLESERVICE_H_
+#define __H_XNET_XIDLESERVICE_H_
 
 #pragma once
 
-#include "XType.h"
-#include "XLogger.h"
-#include "XSocket.h"
-#include "XBeast.h"
+#include "XType.hpp"
+#include "XLogger.hpp"
+#include "XSocket.hpp"
+#include "XBeast.hpp"
 #include <boost/circular_buffer.hpp>
 #include <boost/unordered_set.hpp>
 #include <boost/version.hpp>
@@ -407,4 +407,4 @@ typedef XIdleService<Server> This;
 
 }
 
-#endif //__H_XIDLESERVICE_H_
+#endif //__H_XNET_XIDLESERVICE_H_

@@ -1,9 +1,9 @@
-#ifndef __H_XPEER_H__
-#define __H_XPEER_H__
+#ifndef __H_XNET_XPEER_HPP__
+#define __H_XNET_XPEER_HPP__
 
 #pragma once
 
-#include "XType.h"
+#include "XType.hpp"
 
 namespace XNet {
 
@@ -159,4 +159,4 @@ protected:
 
 }
 
-#endif//__H_XPEER_H__
+#endif//__H_XNET_XPEER_HPP__

@@ -1,9 +1,9 @@
-#ifndef __H_XLOGGER_H_
-#define __H_XLOGGER_H_
+#ifndef __H_XNET_XLOGGER_HPP__
+#define __H_XNET_XLOGGER_HPP__
 
 #pragma once
 
-#include "XType.h"
+#include "XType.hpp"
 #include <boost/log/core.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/log/utility/setup/file.hpp>
@@ -118,4 +118,4 @@ void LOG4E(const char *fmt, Args... args)
 
 } // namespace XNet
 
-#endif //__H_XLOGGER_H_
+#endif //__H_XNET_XLOGGER_HPP__

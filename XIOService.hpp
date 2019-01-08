@@ -1,7 +1,7 @@
-#ifndef __H_XIOSERVICE_H__
-#define __H_XIOSERVICE_H__
+#ifndef __H_XNET_XIOSERVICE_HPP__
+#define __H_XNET_XIOSERVICE_HPP__
 
-#include "XType.h"
+#include "XType.hpp"
 
 namespace XNet {
 
@@ -100,4 +100,4 @@ class XIOService
 
 }
 
-#endif //__H_XIOSERVICE_H__
+#endif //__H_XNET_XIOSERVICE_HPP__
