@@ -25,17 +25,18 @@ typedef std::weak_ptr<xworker_t> xworker_weak_ptr;
 typedef std::shared_ptr<xconnector_t> xconnector_ptr; 
 typedef std::weak_ptr<xconnector_t> xconnector_weak_ptr; 
 #endif 
-#if XSERVER_PROTOTYPE_HTTP 
-typedef detect_session<Server> detect_t; 
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS
 typedef plain_http_session<Server> http_t; 
-typedef ssl_http_session<Server> https_t; 
-typedef std::shared_ptr<detect_t> detect_ptr; 
 typedef std::shared_ptr<http_t> http_ptr; 
-typedef std::weak_ptr<http_t> http_weak_ptr; 
+typedef std::weak_ptr<http_t> http_weak_ptr;  
+#endif 
+#if XSERVER_PROTOTYPE_HTTPS
+typedef detect_session<Server> detect_t; 
+typedef ssl_http_session<Server> https_t;  
 typedef std::shared_ptr<https_t> https_ptr; 
 typedef std::weak_ptr<https_t> https_weak_ptr; 
 #endif 
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE==XSERVER_WEBSOCKET 
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE==XSERVER_WEBSOCKET 
 typedef plain_websocket_session<Server> ws_t; 
 typedef plain_websocket_client_session<Server> ws_clt_t; 
 typedef std::shared_ptr<ws_t> ws_ptr; 
@@ -43,7 +44,7 @@ typedef std::weak_ptr<ws_t> ws_weak_ptr;
 typedef std::shared_ptr<ws_clt_t> ws_clt_ptr; 
 typedef std::weak_ptr<ws_clt_t> ws_clt_weak_ptr; 
 #endif 
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE==XSERVER_SSL_WEBSOCKET 
+#if XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE==XSERVER_SSL_WEBSOCKET 
 typedef ssl_websocket_session<Server> wss_t; 
 typedef ssl_websocket_client_session<Server> wss_clt_t; 
 typedef std::shared_ptr<wss_t> wss_ptr; 
@@ -64,7 +65,7 @@ typedef XIdleService<Server> This;
 		worker_wheel_list_.resize(server_.keepalive());
 		connector_wheel_list_.resize(server_.keepalive());
 #endif //
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_WEBSOCKET
 		ws_wheel_list_.resize(server_.keepalive());
 		ws_clt_wheel_list_.resize(server_.keepalive());
 #endif //
@@ -85,7 +86,7 @@ typedef XIdleService<Server> This;
 		worker_wheel_list_.clear();
 		connector_wheel_list_.clear();
 #endif //
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_WEBSOCKET
 		ws_wheel_list_.clear();
 		ws_clt_wheel_list_.clear();
 #endif //
@@ -115,7 +116,7 @@ typedef XIdleService<Server> This;
 
 #endif //
 
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_WEBSOCKET
 
 	void add(ws_ptr peer_ptr)
 	{
@@ -139,7 +140,7 @@ typedef XIdleService<Server> This;
 
 #endif //
 
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
+#if XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_SSL_WEBSOCKET
 
 	void add(wss_ptr peer_ptr)
 	{
@@ -213,7 +214,7 @@ typedef XIdleService<Server> This;
 
 #endif //
 
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_WEBSOCKET
 
 	void on_add_ws(ws_ptr peer_ptr)
 	{
@@ -255,7 +256,7 @@ typedef XIdleService<Server> This;
 
 #endif //
 
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_SSL_WEBSOCKET
+#if XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_SSL_WEBSOCKET
 
 	void on_add_wss(wss_ptr peer_ptr)
 	{
@@ -312,13 +313,13 @@ typedef XIdleService<Server> This;
 			BOOST_ASSERT(worker_wheel_list_.size() == server_.keepalive());
 			connector_wheel_list_.push_back(xconnector_entry_bucket());
 #endif //
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_WEBSOCKET
 			ws_wheel_list_.push_back(ws_entry_bucket());
 			BOOST_ASSERT(ws_wheel_list_.size() == server_.keepalive());
 			ws_clt_wheel_list_.push_back(ws_clt_entry_bucket());
 #endif // 
 	   //ping middle of wheel
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_WEBSOCKET
 			ws_entry_bucket &ws_list = ws_wheel_list_[ws_wheel_list_.size() / 2];
 			for (typename ws_entry_bucket::iterator it = ws_list.begin(); it != ws_list.end(); ++it)
 			{
@@ -361,7 +362,7 @@ typedef XIdleService<Server> This;
 			}
 		}
 
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET || XSERVER_PROTOTYPE_SSL_WEBSOCKET
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_WEBSOCKET || XSERVER_PROTOTYPE_SSL_WEBSOCKET
 		void ping()
 		{
 			std::shared_ptr<entry> entry_ptr = entry_ptr_.lock();
@@ -389,7 +390,7 @@ typedef XIdleService<Server> This;
 	typedef boost::circular_buffer<xconnector_entry_bucket> xconnector_entry_bucket_list;
 	xconnector_entry_bucket_list connector_wheel_list_;
 #endif //
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_WEBSOCKET
 	typedef x_idle_entry<ws_t> ws_entry;
 	typedef std::shared_ptr<ws_entry> ws_entry_ptr;
 	typedef std::weak_ptr<ws_entry> ws_entry_weak_ptr;

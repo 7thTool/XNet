@@ -39,7 +39,7 @@
 
 namespace XNet {
 
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_WEBSOCKET
 
 //------------------------------------------------------------------------------
 
@@ -93,14 +93,14 @@ class websocket_session : public XPeer<Server>
 
 	void close()
 	{
-		server().PostIO(id(),
+		server().post_io_callback(id(),
 					   boost::bind(&Derived::do_close,
 								   derived().shared_from_this()));
 	}
 
 	void ping()
 	{
-		server().PostIO(id(),
+		server().post_io_callback(id(),
 					   boost::bind(&Derived::do_ping,
 								   derived().shared_from_this()));
 	}
@@ -447,7 +447,7 @@ class websocket_session : public XPeer<Server>
 
 #endif //
 
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE == XSERVER_WEBSOCKET
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE == XSERVER_WEBSOCKET
 
 // Handles a plain WebSocket connection
 template <class Server>
@@ -568,7 +568,7 @@ class plain_websocket_session
 
 #endif //
 
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE == XSERVER_SSL_WEBSOCKET
+#if XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE == XSERVER_SSL_WEBSOCKET
 
 // Handles an SSL WebSocket connection
 template <class Server>
@@ -714,7 +714,7 @@ class ssl_websocket_session
 
 #endif //
 
-#if XSERVER_PROTOTYPE_HTTP
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS
 
 template <class Server, class Body, class Allocator>
 void upgrade_websocket_session(Server &srv, size_t id,
@@ -727,6 +727,10 @@ void upgrade_websocket_session(Server &srv, size_t id,
 	ws_ptr->run(std::move(req));
 }
 
+#endif
+
+#if XSERVER_PROTOTYPE_HTTPS
+
 template <class Server, class Body, class Allocator>
 void upgrade_websocket_session(Server &srv, size_t id,
 							   ssl_stream<boost::asio::ip::tcp::socket> &&stream,
@@ -737,6 +741,10 @@ void upgrade_websocket_session(Server &srv, size_t id,
 	srv.on_io_upgrade(wss_ptr);
 	wss_ptr->run(std::move(req));
 }
+
+#endif
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS
 
 //------------------------------------------------------------------------------
 
@@ -866,6 +874,14 @@ class http_session : public XPeer<Server>
 	// Construct the session
 	http_session(Server &srv, size_t id,
 				 boost::asio::io_context &ioc,
+				 std::string const &doc_root)
+		: Base(srv, id), doc_root_(doc_root), queue_(*this), timer_(ioc,
+																	 (std::chrono::steady_clock::time_point::max)()),
+		  strand_(ioc.get_executor()), buffer_()
+	{
+	}
+	http_session(Server &srv, size_t id,
+				 boost::asio::io_context &ioc,
 				 boost::beast::flat_buffer buffer,
 				 std::string const &doc_root)
 		: Base(srv, id), doc_root_(doc_root), queue_(*this), timer_(ioc,
@@ -876,7 +892,7 @@ class http_session : public XPeer<Server>
 
 	void close()
 	{
-		server().PostIO(id(),
+		server().post_io_callback(id(),
 					   boost::bind(&Derived::do_close,
 								   derived().shared_from_this()));
 	}
@@ -1026,6 +1042,11 @@ class http_session : public XPeer<Server>
 	}
 };
 
+#endif
+
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS
+
 // Handles a plain HTTP connection
 template <class Server>
 class plain_http_session
@@ -1041,6 +1062,15 @@ class plain_http_session
 
   public:
 	// Create the plain_http_session
+	plain_http_session(Server &srv, size_t id,
+					   boost::asio::ip::tcp::socket socket,
+					   std::string const &doc_root)
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_HTTP, id),
+										   socket.get_executor().context(),
+										   doc_root),
+		  socket_(std::move(socket)), strand_(socket_.get_executor())
+	{
+	}
 	plain_http_session(Server &srv, size_t id,
 					   boost::asio::ip::tcp::socket socket,
 					   boost::beast::flat_buffer buffer,
@@ -1114,6 +1144,11 @@ class plain_http_session
 	}
 };
 
+#endif
+
+
+#if XSERVER_PROTOTYPE_HTTPS
+
 // Handles an SSL HTTP connection
 template <class Server>
 class ssl_http_session
@@ -1130,6 +1165,16 @@ class ssl_http_session
 
   public:
 	// Create the http_session
+	ssl_http_session(Server &srv, size_t id,
+					 boost::asio::ip::tcp::socket socket,
+					 boost::asio::ssl::context &ctx,
+					 std::string const &doc_root)
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_HTTPS, id),
+										 socket.get_executor().context(),
+										 doc_root),
+		  stream_(std::move(socket), ctx), strand_(stream_.get_executor())
+	{
+	}
 	ssl_http_session(Server &srv, size_t id,
 					 boost::asio::ip::tcp::socket socket,
 					 boost::asio::ssl::context &ctx,
@@ -1260,6 +1305,10 @@ class ssl_http_session
 	}
 };
 
+#endif//
+
+#if XSERVER_PROTOTYPE_HTTPS
+
 //------------------------------------------------------------------------------
 
 // Detects SSL handshakes
@@ -1282,7 +1331,7 @@ class detect_session
 	explicit
 		// Detects SSL handshakes
 		detect_session(Server &srv, size_t id,
-					   boost::asio::ip::tcp::socket socket,
+					   boost::asio::ip::tcp::socket socket,		   
 					   boost::asio::ssl::context &ctx,
 					   std::string const &doc_root)
 		: Base(srv, PEER_ID(id)), socket_(std::move(socket)), ctx_(ctx), strand_(socket_.get_executor()), doc_root_(doc_root)
@@ -1334,7 +1383,7 @@ class detect_session
 
 #endif //
 
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_WEBSOCKET
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_WEBSOCKET
 
 // WebSocket client
 template <class Server, class Derived>
@@ -1371,14 +1420,14 @@ class websocket_client_session
 
 	void close()
 	{
-		server().PostIO(id(),
+		server().post_io_callback(id(),
 					   boost::bind(&Derived::do_close,
 								   derived().shared_from_this()));
 	}
 
 	void ping()
 	{
-		server().PostIO(id(),
+		server().post_io_callback(id(),
 					   boost::bind(&Derived::do_ping,
 								   derived().shared_from_this()));
 	}
@@ -1617,7 +1666,7 @@ class websocket_client_session
 
 #endif //
 
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE == XSERVER_WEBSOCKET
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE == XSERVER_WEBSOCKET
 
 // Handles a plain WebSocket connection
 template <class Server>
@@ -1676,7 +1725,7 @@ class plain_websocket_client_session
 
 #endif //
 
-#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE == XSERVER_SSL_WEBSOCKET
+#if XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE == XSERVER_SSL_WEBSOCKET
 
 // Handles an SSL WebSocket connection
 template <class Server>
