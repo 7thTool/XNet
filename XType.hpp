@@ -79,7 +79,7 @@
 #include <boost/asio/ssl/error.hpp>
 #include <boost/asio/ssl/stream.hpp>
 #endif
-
+/*
 #ifndef _WIN32
 #define nullptr 0
 #endif
@@ -114,7 +114,7 @@ typedef size_t	            x_size_t;
 typedef float				x_float_t;
 typedef double				x_double_t;
 typedef void*				x_voidptr_t;
-
+*/
 #define PEER_TYPE_MASK			0xff
 #define PEER_TYPE_BITS			8
 #define PEER_ID_BITS 			(sizeof(size_t) * 8 - PEER_TYPE_BITS)

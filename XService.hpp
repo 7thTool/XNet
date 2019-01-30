@@ -113,8 +113,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 		srand((unsigned int)time(0));
 
-		std::string logfile = log_directory_ + pT->name();
-		XLogger::instance().init(logfile);
+		//std::string logfile = log_directory_ + pT->name();
+		//XLogger::instance().init(logfile);
 
 		io_service_ = std::make_shared<XIOService<T>>(*static_cast<T*>(this));
 
@@ -509,11 +509,11 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		//	}
 	}
 
-	void on_io_read(xworker_ptr peer_ptr, XRWBuffer &buffer)
+	void on_io_read(xworker_ptr peer_ptr, XBuffer &buffer)
 	{
 	}
 
-	void on_io_write(xworker_ptr peer_ptr, XRWBuffer &buffer)
+	void on_io_write(xworker_ptr peer_ptr, XBuffer &buffer)
 	{
 	}
 
@@ -536,11 +536,11 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		//}
 	}
 
-	void on_io_read(xconnector_ptr peer_ptr, XRWBuffer &buffer)
+	void on_io_read(xconnector_ptr peer_ptr, XBuffer &buffer)
 	{
 	}
 
-	void on_io_write(xconnector_ptr peer_ptr, XRWBuffer &buffer)
+	void on_io_write(xconnector_ptr peer_ptr, XBuffer &buffer)
 	{
 	}
 
@@ -567,7 +567,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 #if XSERVER_PROTOTYPE_HTTPS
 	//detect_ptr检测完成之后会变成http_ptr或https_ptr
 	//http_ptr和https_ptr分别可以升级为ws_ptr和wss_ptr
-	void on_io_accept(detect_ptr peer_ptr, const x_int_t type)
+	void on_io_accept(detect_ptr peer_ptr, const int_t type)
 	{
 		
 	}
@@ -916,7 +916,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		return 1 + id % (io_thread_num_ - 1);
 	}
 
-	void post_accept(const std::shared_ptr<boost::asio::ip::tcp::acceptor> &acceptor, const x_int_t type)
+	void post_accept(const std::shared_ptr<boost::asio::ip::tcp::acceptor> &acceptor, const int_t type)
 	{
 		if (!is_run())
 		{
@@ -931,7 +931,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		acceptor->async_accept(*socket, boost::bind(&T::on_accept, static_cast<T*>(this), boost::asio::placeholders::error, acceptor, type, socket, peer_id));
 	}
 
-	void on_accept(const boost::system::error_code &ec, const std::shared_ptr<boost::asio::ip::tcp::acceptor> &acceptor, const x_int_t type, const std::shared_ptr<boost::asio::ip::tcp::socket> &socket, const size_t peer_id)
+	void on_accept(const boost::system::error_code &ec, const std::shared_ptr<boost::asio::ip::tcp::acceptor> &acceptor, const int_t type, const std::shared_ptr<boost::asio::ip::tcp::socket> &socket, const size_t peer_id)
 	{
 		if (ec)
 		{

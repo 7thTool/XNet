@@ -4,9 +4,9 @@
 #pragma once
 
 #include "XType.hpp"
-#include "XLogger.hpp"
 #include "XSocket.hpp"
 #include "XBeast.hpp"
+#include <XUtil/XLogger.hpp>
 #include <boost/circular_buffer.hpp>
 #include <boost/unordered_set.hpp>
 #include <boost/version.hpp>

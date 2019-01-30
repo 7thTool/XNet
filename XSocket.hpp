@@ -4,9 +4,7 @@
 #pragma once
 
 #include "XType.hpp"
-#include "XBuffer.hpp"
 #include "XPeer.hpp"
-#include "XLogger.hpp"
 
 namespace XNet {
 
@@ -244,9 +242,9 @@ class XSocket : public XPeer<Server>
   protected:
 	//x_packet_t packet_;
 	//char read_buffer_[1024];
-	XRWBuffer recv_buffer_;
-	XRWBuffer send_buffer_;
-	XRWBuffer write_buffer_;
+	XBuffer recv_buffer_;
+	XBuffer send_buffer_;
+	XBuffer write_buffer_;
 	bool write_complete;
 	boost::mutex write_mutex_;
 };

@@ -22,17 +22,14 @@ public:
 	#if XSERVER_PROTOTYPE_TCP
 		void on_tcp_accept(xworker_ptr peer_ptr) {}
 		void on_tcp_clt_connect(xconnector_ptr peer_ptr) {}
-		void on_tcp_read(xworker_ptr peer_ptr, XRWBuffer &buffer) {}
-		void on_tcp_write(xworker_ptr peer_ptr, XRWBuffer &buffer) {}
+		void on_tcp_read(xworker_ptr peer_ptr, XBuffer &buffer) {}
+		void on_tcp_write(xworker_ptr peer_ptr, XBuffer &buffer) {}
 		void on_tcp_close(xworker_t *peer_ptr) {}
-		void on_tcp_clt_read(xconnector_ptr peer_ptr, XRWBuffer &buffer) {}
-		void on_tcp_clt_write(xconnector_ptr peer_ptr, XRWBuffer &buffer) {}
+		void on_tcp_clt_read(xconnector_ptr peer_ptr, XBuffer &buffer) {}
+		void on_tcp_clt_write(xconnector_ptr peer_ptr, XBuffer &buffer) {}
 		void on_tcp_clt_close(xconnector_t *peer_ptr) {}
 	#endif //
 	#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS
-		void on_http_accept(http_ptr peer_ptr) {}
-	#endif //
-	#if XSERVER_PROTOTYPE_HTTPS
 		void on_http_accept(http_ptr peer_ptr) {}
 	#endif //
 	#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_WEBSOCKET
@@ -120,12 +117,12 @@ public:
 		listener_->on_tcp_clt_connect(peer_ptr);
 	}
 
-	void on_io_read(xworker_ptr peer_ptr, XRWBuffer &buffer)
+	void on_io_read(xworker_ptr peer_ptr, XBuffer &buffer)
 	{
 		listener_->on_tcp_read(peer_ptr, buffer);
 	}
 
-	void on_io_write(xworker_ptr peer_ptr, XRWBuffer &buffer)
+	void on_io_write(xworker_ptr peer_ptr, XBuffer &buffer)
 	{
 		listener_->on_tcp_write(peer_ptr, buffer);
 	}
@@ -136,12 +133,12 @@ public:
 		listener_->on_tcp_close(peer_ptr);
 	}
 
-	void on_io_read(xconnector_ptr peer_ptr, XRWBuffer &buffer)
+	void on_io_read(xconnector_ptr peer_ptr, XBuffer &buffer)
 	{
 		listener_->on_tcp_clt_read(peer_ptr, buffer);
 	}
 
-	void on_io_write(xconnector_ptr peer_ptr, XRWBuffer &buffer)
+	void on_io_write(xconnector_ptr peer_ptr, XBuffer &buffer)
 	{
 		listener_->on_tcp_clt_write(peer_ptr, buffer);
 	}

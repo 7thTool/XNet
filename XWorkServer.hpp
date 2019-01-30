@@ -600,7 +600,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		//	}
 	}
 
-	void on_io_read(xworker_ptr peer_ptr, XRWBuffer &buffer)
+	void on_io_read(xworker_ptr peer_ptr, XBuffer &buffer)
 	{
 		if(idle_service_)
 			idle_service_->active(peer_ptr);
@@ -608,7 +608,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		peer_ptr->do_read();
 	}
 
-	void on_io_write(xworker_ptr peer_ptr, XRWBuffer &buffer)
+	void on_io_write(xworker_ptr peer_ptr, XBuffer &buffer)
 	{
 		
 	}
@@ -632,7 +632,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		//}
 	}
 
-	void on_io_read(xconnector_ptr peer_ptr, XRWBuffer &buffer)
+	void on_io_read(xconnector_ptr peer_ptr, XBuffer &buffer)
 	{
 		if(idle_service_)
 			idle_service_->active(peer_ptr);
@@ -640,7 +640,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		peer_ptr->do_read();
 	}
 
-	void on_io_write(xconnector_ptr peer_ptr, XRWBuffer &buffer)
+	void on_io_write(xconnector_ptr peer_ptr, XBuffer &buffer)
 	{
 		
 	}

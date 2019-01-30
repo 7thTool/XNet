@@ -4,6 +4,7 @@
 #pragma once
 
 #include "XType.hpp"
+#include "XUtil.hpp"
 
 namespace XNet {
 
