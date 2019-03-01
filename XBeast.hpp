@@ -51,11 +51,7 @@ class websocket_session
 {
 	// Access the derived class, this is part of
 	// the Curiously Recurring Template Pattern idiom.
-	Derived &
-	inline derived()
-	{
-		return static_cast<Derived &>(*this);
-	}
+	inline Derived & derived() { return static_cast<Derived &>(*this); }
 
 	boost::beast::multi_buffer read_buffers_; //当前收到的包
 	//std::string read_buffer_; //buffer_ => string
@@ -443,7 +439,7 @@ class plain_websocket_session
 
 	~plain_websocket_session()
 	{
-		derived().server().on_io_close(this);
+		server().on_io_close(this);
 	}
 
 	// Called by the base class
@@ -495,7 +491,7 @@ class plain_websocket_session
 		ws_.async_close(
 			boost::beast::websocket::close_code::normal,
 			boost::asio::bind_executor(
-				Base::strand_,
+				strand_,
 				std::bind(
 					&This::on_close,
 					this->shared_from_this(),
@@ -573,7 +569,7 @@ class ssl_websocket_session
 
 	~ssl_websocket_session()
 	{
-		derived().server().on_io_close(this);
+		server().on_io_close(this);
 	}
 
 	// Called by the base class
@@ -730,11 +726,7 @@ class http_session
 {
 	// Access the derived class, this is part of
 	// the Curiously Recurring Template Pattern idiom.
-	Derived &
-	inline derived()
-	{
-		return static_cast<Derived &>(*this);
-	}
+	inline Derived & derived() { return static_cast<Derived &>(*this); }
 
 	// This queue is used for HTTP pipelining.
 	class queue
@@ -926,7 +918,7 @@ class http_session
 		if (boost::beast::websocket::is_upgrade(req_))
 		{
 			// Transfer the stream to a new WebSocket session
-			return upgrade_websocket_session(this->server_, derived().id(),
+			return upgrade_websocket_session(derived().server(), derived().id(),
 											 derived().release_stream(),
 											 std::move(req_));
 		}
@@ -974,7 +966,7 @@ template <class Server>
 class plain_http_session
 	: public http_session<Server, plain_http_session<Server>>
 	, public XPeer<Server>
-	  public std::enable_shared_from_this<plain_http_session<Server>>
+	, public std::enable_shared_from_this<plain_http_session<Server>>
 {
 	typedef plain_http_session<Server> This;
 	typedef XPeer<Server> Base;
@@ -1004,7 +996,7 @@ class plain_http_session
 
 	~plain_http_session()
 	{
-		derived().server().on_io_close(this);
+		server().on_io_close(this);
 	}
 
 	// Called by the base class
@@ -1106,7 +1098,7 @@ class ssl_http_session
 
 	~ssl_http_session()
 	{
-		derived().server().on_io_close(this);
+		server().on_io_close(this);
 	}
 
 	bool is_open()
@@ -1569,7 +1561,7 @@ class plain_websocket_client_session
 
 	~plain_websocket_client_session()
 	{
-		derived().server().on_io_close(this);
+		server().on_io_close(this);
 	}
 
 	boost::beast::websocket::stream<boost::asio::ip::tcp::socket> &
@@ -1630,7 +1622,7 @@ class ssl_websocket_client_session
 
 	~ssl_websocket_client_session()
 	{
-		derived().server().on_io_close(this);
+		server().on_io_close(this);
 	}
 
 	// Called by the base class

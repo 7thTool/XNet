@@ -45,7 +45,7 @@ public:
   }
 };
 
-template<class Server, class Derived>
+template<class Derived>
 class XResolver
 {
 protected:
@@ -109,11 +109,13 @@ protected:
 };
 
 template<class Server, class Derived>
-class XClientPeer : public XPeer<Server>, public XResolver<Server, Derived>
+class XClientPeer 
+	: public XPeer<Server>
+	, public XResolver<Derived>
 {
 	typedef XPeer<Server> Base;
 public:
-	typedef XResolver<Server, Derived> Resolver;
+	typedef XResolver<Derived> Resolver;
 protected:
 	boost::asio::steady_timer timer_;
 	size_t timeout_;
