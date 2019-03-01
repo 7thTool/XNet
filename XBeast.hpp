@@ -47,13 +47,12 @@ namespace XNet {
 // This uses the Curiously Recurring Template Pattern so that
 // the same code works with both SSL streams and regular sockets.
 template <class Server, class Derived>
-class websocket_session : public XPeer<Server>
+class websocket_session
 {
-	typedef XPeer<Server> Base;
 	// Access the derived class, this is part of
 	// the Curiously Recurring Template Pattern idiom.
 	Derived &
-	derived()
+	inline derived()
 	{
 		return static_cast<Derived &>(*this);
 	}
@@ -68,17 +67,15 @@ class websocket_session : public XPeer<Server>
 	boost::mutex write_mutex_;
 
   protected:
-	boost::asio::strand<
-		boost::asio::io_context::executor_type>
-		strand_;
+	boost::asio::strand<boost::asio::io_context::executor_type> strand_;
 	//boost::asio::steady_timer timer_;
 	std::function<void(boost::beast::websocket::frame_type, boost::beast::string_view)>
 		control_callback_;
 
   public:
 	// Construct the session
-	explicit websocket_session(Server &srv, size_t id, boost::asio::io_context &ioc)
-		: Base(srv, id), strand_(ioc.get_executor())
+	explicit websocket_session(boost::asio::io_context &ioc)
+		: strand_(ioc.get_executor())
 	//, timer_(ioc,(std::chrono::steady_clock::time_point::max)())
 	{
 	}
@@ -93,14 +90,22 @@ class websocket_session : public XPeer<Server>
 
 	void close()
 	{
-		server().post_io_callback(id(),
-					   boost::bind(&Derived::do_close,
-								   derived().shared_from_this()));
+		derived().server().post_io_callback(derived().id()
+		, boost::bind(&Derived::do_close, derived().shared_from_this()));
+		// // Close the WebSocket Connection
+		// ws_.async_close(
+		// 	boost::beast::websocket::close_code::normal,
+		// 	boost::asio::bind_executor(
+		// 		strand_,
+		// 		std::bind(
+		// 			&Derived::on_close,
+		// 			derived().shared_from_this(),
+		// 			std::placeholders::_1)));
 	}
 
 	void ping()
 	{
-		server().post_io_callback(id(),
+		derived().server().post_io_callback(derived().id(),
 					   boost::bind(&Derived::do_ping,
 								   derived().shared_from_this()));
 	}
@@ -109,41 +114,6 @@ class websocket_session : public XPeer<Server>
 	{
 		derived().on_timer({});
 	}
-
-	/*x_packet_t& packet()
-	{
-		if (packet_.empty()) {
-			if (!read_buffer_.empty()) {
-				packet_.req_data = read_buffer_.data();
-				packet_.req_size = read_buffer_.size();
-				packet_.create_time = boost::posix_time::microsec_clock::local_time();
-			}
-			else {
-				derived().do_read();
-			}
-		}
-		return packet_;
-	}
-	void response(const char* buf, size_t len, bool is_last)
-	{
-		BOOST_ASSERT(is_last);
-		if (is_last) {
-			packet_.destroy_time = boost::posix_time::microsec_clock::local_time();
-		}
-		//发送回应,数据发完on_write会自动继续读
-		if (buf && len) {
-			derived().do_write(buf, len);
-		}
-	}
-	void on_packet_complete()
-	{
-		//清除请求
-		packet_.clear();
-
-		// Clear the buffer
-		read_buffers_.consume(read_buffers_.size());
-		read_buffer_.clear();
-	}*/
 
 	void do_write(const char *buf, size_t len)
 	{
@@ -164,7 +134,7 @@ class websocket_session : public XPeer<Server>
 	void
 	do_accept(boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req)
 	{
-		server().on_io_preaccept(derived().shared_from_this(), std::move(req));
+		derived().server().on_io_preaccept(derived().shared_from_this(), std::move(req));
 
 		// Set the control callback. This will be called
 		// on every incoming ping, pong, and close frame.
@@ -221,7 +191,7 @@ class websocket_session : public XPeer<Server>
 			return;
 
 		if (ec)
-			return on_fail(ec, "accept");
+			return derived().on_fail(ec, "accept");
 
 		// Read a message
 		derived().do_read();
@@ -232,7 +202,7 @@ class websocket_session : public XPeer<Server>
 	on_timer(const boost::system::error_code &ec)
 	{
 		if (ec && ec != boost::asio::error::operation_aborted)
-			return on_fail(ec, "timer");
+			return derived().on_fail(ec, "timer");
 
 		if (!derived().is_open())
 		{
@@ -292,7 +262,7 @@ class websocket_session : public XPeer<Server>
 		// Set the timer
 		//timer_.expires_after(std::chrono::seconds(15));
 
-		server().on_io_activity(derived().shared_from_this());
+		derived().server().on_io_activity(derived().shared_from_this());
 	}
 
 	// Called after a ping is sent.
@@ -304,7 +274,7 @@ class websocket_session : public XPeer<Server>
 			return;
 
 		if (ec)
-			return on_fail(ec, "ping");
+			return derived().on_fail(ec, "ping");
 
 		// Note that the ping was sent.
 		if (ping_state_ == 1)
@@ -394,11 +364,11 @@ class websocket_session : public XPeer<Server>
 			oss << boost::beast::buffers(read_buffers_.data());*/
 			std::string buffer = boost::beast::buffers_to_string(read_buffers_.data());
 			read_buffers_.consume(read_buffers_.size());
-			server().on_io_read(derived().shared_from_this(), buffer);
+			derived().server().on_io_read(derived().shared_from_this(), buffer);
 		}
 		else
 		{
-			on_fail(ec, "read");
+			derived().on_fail(ec, "read");
 		}
 	}
 
@@ -431,7 +401,7 @@ class websocket_session : public XPeer<Server>
 		if (!ec)
 		{
 			std::string &buffer = write_buffers_.front();
-			server().on_io_write(derived().shared_from_this(), buffer);
+			derived().server().on_io_write(derived().shared_from_this(), buffer);
 			boost::mutex::scoped_lock lock(write_mutex_);
 			write_complete_ = true;
 			write_buffers_.pop_front();
@@ -440,7 +410,7 @@ class websocket_session : public XPeer<Server>
 		}
 		else
 		{
-			return on_fail(ec, "write");
+			return derived().on_fail(ec, "write");
 		}
 	}
 };
@@ -453,25 +423,27 @@ class websocket_session : public XPeer<Server>
 template <class Server>
 class plain_websocket_session
 	: public websocket_session<Server, plain_websocket_session<Server>>
+	, public XPeer<Server>
 	, public std::enable_shared_from_this<plain_websocket_session<Server>>
 {
 	typedef plain_websocket_session<Server> This;
-	typedef websocket_session<Server, plain_websocket_session<Server>> Base;
+	typedef XPeer<Server> Base;
+	typedef websocket_session<Server, plain_websocket_session<Server>> Handler;
 	boost::beast::websocket::stream<boost::asio::ip::tcp::socket> ws_;
 	bool close_ = false;
 
   public:
 	// Create the plain_websocket_session
 	explicit plain_websocket_session(Server &srv, size_t id, boost::asio::ip::tcp::socket socket)
-		: Base(srv, MAKE_PEER_ID(PEER_TYPE_WEBSOCKET, id),
-													 socket.get_executor().context()),
-		  ws_(std::move(socket))
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_WEBSOCKET, id))
+		, Handler(socket.get_executor().context())
+		, ws_(std::move(socket))
 	{
 	}
 
 	~plain_websocket_session()
 	{
-		server().on_io_close(this);
+		derived().server().on_io_close(this);
 	}
 
 	// Called by the base class
@@ -496,7 +468,7 @@ class plain_websocket_session
 		//on_timer({});
 
 		// Accept the WebSocket upgrade request
-		do_accept(std::move(req));
+		this->do_accept(std::move(req));
 	}
 	void
 	run()
@@ -506,7 +478,7 @@ class plain_websocket_session
 		//on_timer({});
 
 		// Accept the WebSocket request
-		do_accept();
+		this->do_accept();
 	}
 
 	void
@@ -526,7 +498,7 @@ class plain_websocket_session
 				Base::strand_,
 				std::bind(
 					&This::on_close,
-					shared_from_this(),
+					this->shared_from_this(),
 					std::placeholders::_1)));
 	}
 
@@ -548,7 +520,7 @@ class plain_websocket_session
 				Base::strand_,
 				std::bind(
 					&This::on_close,
-					shared_from_this(),
+					this->shared_from_this(),
 					std::placeholders::_1)));
 	}
 
@@ -560,7 +532,7 @@ class plain_websocket_session
 			return;
 
 		if (ec)
-			return on_fail(ec, "close");
+			return this->on_fail(ec, "close");
 
 		// At this point the connection is gracefully closed
 	}
@@ -574,32 +546,34 @@ class plain_websocket_session
 template <class Server>
 class ssl_websocket_session
 	: public websocket_session<Server, ssl_websocket_session<Server>>
-	,  public std::enable_shared_from_this<ssl_websocket_session<Server>>
+	, public XPeer<Server>
+	, public std::enable_shared_from_this<ssl_websocket_session<Server>>
 {
 	typedef ssl_websocket_session<Server> This;
-	typedef websocket_session<Server, ssl_websocket_session<Server>> Base;
+	typedef XPeer<Server> Base;
+	typedef websocket_session<Server, ssl_websocket_session<Server>> Handler;
 	boost::beast::websocket::stream<ssl_stream<boost::asio::ip::tcp::socket>> ws_;
-	boost::asio::strand<
-		boost::asio::io_context::executor_type>
-		strand_;
+	//boost::asio::strand<boost::asio::io_context::executor_type> strand_;
 	bool eof_ = false;
 
   public:
 	// Create the ssl_websocket_session
 	explicit ssl_websocket_session(Server &srv, size_t id, ssl_stream<boost::asio::ip::tcp::socket> stream)
-		: Base(srv, MAKE_PEER_ID(PEER_TYPE_SSL_WEBSOCKET, id), stream.get_executor().context()),
-		  ws_(std::move(stream)), strand_(ws_.get_executor())
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_SSL_WEBSOCKET, id))
+		, Handler(stream.get_executor().context())
+		, ws_(std::move(stream))
 	{
 	}
 	explicit ssl_websocket_session(Server &srv, size_t id, boost::asio::ip::tcp::socket socket, boost::asio::ssl::context &ctx)
-		: Base(srv, MAKE_PEER_ID(PEER_TYPE_WEBSOCKET, id), socket.get_executor().context()),
-		  ws_(std::move(socket), ctx), strand_(ws_.get_executor())
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_WEBSOCKET, id))
+		, Handler(socket.get_executor().context())
+		, ws_(std::move(socket), ctx))
 	{
 	}
 
 	~ssl_websocket_session()
 	{
-		server().on_io_close(this);
+		derived().server().on_io_close(this);
 	}
 
 	// Called by the base class
@@ -656,7 +630,7 @@ class ssl_websocket_session
 	on_handshake(const boost::system::error_code &ec)
 	{
 		if (ec)
-			return on_fail(ec, "handshake");
+			return derived().on_fail(ec, "handshake");
 
 		// Run the timer. The timer is operated
 		// continuously, this simplifies the code.
@@ -692,7 +666,7 @@ class ssl_websocket_session
 			return;
 
 		if (ec)
-			return on_fail(ec, "shutdown");
+			return derived().on_fail(ec, "shutdown");
 
 		// At this point the connection is closed gracefully
 	}
@@ -752,13 +726,12 @@ void upgrade_websocket_session(Server &srv, size_t id,
 // This uses the Curiously Recurring Template Pattern so that
 // the same code works with both SSL streams and regular sockets.
 template <class Server, class Derived>
-class http_session : public XPeer<Server>
+class http_session
 {
-	typedef XPeer<Server> Base;
 	// Access the derived class, this is part of
 	// the Curiously Recurring Template Pattern idiom.
 	Derived &
-	derived()
+	inline derived()
 	{
 		return static_cast<Derived &>(*this);
 	}
@@ -865,81 +838,30 @@ class http_session : public XPeer<Server>
 
   protected:
 	boost::asio::steady_timer timer_;
-	boost::asio::strand<
-		boost::asio::io_context::executor_type>
-		strand_;
+	boost::asio::strand<boost::asio::io_context::executor_type> strand_;
 	boost::beast::flat_buffer buffer_;
 
   public:
 	// Construct the session
-	http_session(Server &srv, size_t id,
-				 boost::asio::io_context &ioc,
-				 std::string const &doc_root)
-		: Base(srv, id), doc_root_(doc_root), queue_(*this), timer_(ioc,
-																	 (std::chrono::steady_clock::time_point::max)()),
-		  strand_(ioc.get_executor()), buffer_()
+	http_session(boost::asio::io_context &ioc, std::string const &doc_root)
+		: doc_root_(doc_root), queue_(*this)
+		, timer_(ioc,(std::chrono::steady_clock::time_point::max)())
+		, strand_(ioc.get_executor()), buffer_()
 	{
 	}
-	http_session(Server &srv, size_t id,
-				 boost::asio::io_context &ioc,
-				 boost::beast::flat_buffer buffer,
-				 std::string const &doc_root)
-		: Base(srv, id), doc_root_(doc_root), queue_(*this), timer_(ioc,
-																	 (std::chrono::steady_clock::time_point::max)()),
-		  strand_(ioc.get_executor()), buffer_(std::move(buffer))
+	http_session(boost::asio::io_context &ioc, boost::beast::flat_buffer buffer, std::string const &doc_root)
+		: doc_root_(doc_root), queue_(*this)
+		, timer_(ioc,(std::chrono::steady_clock::time_point::max)())
+		, strand_(ioc.get_executor()), buffer_(std::move(buffer))
 	{
 	}
 
 	void close()
 	{
-		server().post_io_callback(id(),
+		derived().server().post_io_callback(derived().id(),
 					   boost::bind(&Derived::do_close,
 								   derived().shared_from_this()));
 	}
-
-	// x_packet_t& packet()
-	// {
-	// 	if (packet_.empty()) {
-	// 		packet_.req_ = std::move(req_);
-	// 		packet_.req_size = 1; //设置有效标志
-	// 		packet_.req_data = (const char*)&packet_.req_;
-	// 		packet_.create_time = boost::posix_time::microsec_clock::local_time();
-	// 	}
-	// 	return packet_;
-	// }
-	// void response(const char* buf, size_t len, bool is_last)
-	// {
-	// 	BOOST_ASSERT(is_last);
-	// 	if (is_last) {
-	// 		packet_.destroy_time = boost::posix_time::microsec_clock::local_time();
-	// 	}
-	// 	//发送回应
-	// 	/*boost::beast::http::response<boost::beast::http::string_body> res{ boost::beast::http::status::ok, req_.req_data.version() };
-	// 	res.set(boost::beast::http::field::server, BOOST_BEAST_VERSION_STRING);
-	// 	res.set(boost::beast::http::field::content_type, "text/html");
-	// 	res.keep_alive(req.keep_alive());
-	// 	res.body() = buf;
-	// 	res.prepare_payload();
-	// 	response(res);*/
-	// }
-	// template<bool isRequest, class Body, class Fields>
-	// void
-	// 	response(boost::beast::http::message<isRequest, Body, Fields>&& msg)
-	// {
-	// 	// Send the response
-	// 	queue_(msg);
-	// }
-	// void on_packet_complete()
-	// {
-	// 	//请求处理完成
-	// 	size_t req_size = packet_.req_size;
-	// 	//清除请求
-	// 	packet_.clear();
-
-	// 	// If we aren't at the queue limit, try to pipeline another request
-	// 	if (!queue_.is_full())
-	// 		derived().do_read();
-	// }
 
 	void
 	do_read()
@@ -965,7 +887,7 @@ class http_session : public XPeer<Server>
 	on_timer(const boost::system::error_code &ec)
 	{
 		if (ec && ec != boost::asio::error::operation_aborted)
-			return on_fail(ec, "timer");
+			return derived().on_fail(ec, "timer");
 
 		if (!derived().is_open())
 		{
@@ -998,18 +920,18 @@ class http_session : public XPeer<Server>
 			return derived().do_eof();
 
 		if (ec)
-			return on_fail(ec, "read");
+			return derived().on_fail(ec, "read");
 
 		// See if it is a WebSocket Upgrade
 		if (boost::beast::websocket::is_upgrade(req_))
 		{
 			// Transfer the stream to a new WebSocket session
-			return upgrade_websocket_session(server(), id(),
+			return upgrade_websocket_session(this->server_, derived().id(),
 											 derived().release_stream(),
 											 std::move(req_));
 		}
 
-		server().on_io_read(derived().shared_from_this(), doc_root_, std::move(req_), queue_);
+		derived().server().on_io_read(derived().shared_from_this(), doc_root_, std::move(req_), queue_);
 
 		// If we aren't at the queue limit, try to pipeline another request
 		if (!queue_.is_full())
@@ -1024,7 +946,7 @@ class http_session : public XPeer<Server>
 			return;
 
 		if (ec)
-			return on_fail(ec, "write");
+			return derived().on_fail(ec, "write");
 
 		if (close)
 		{
@@ -1050,42 +972,39 @@ class http_session : public XPeer<Server>
 // Handles a plain HTTP connection
 template <class Server>
 class plain_http_session
-	: public http_session<Server, plain_http_session<Server>>,
+	: public http_session<Server, plain_http_session<Server>>
+	, public XPeer<Server>
 	  public std::enable_shared_from_this<plain_http_session<Server>>
 {
 	typedef plain_http_session<Server> This;
-	typedef http_session<Server, plain_http_session<Server>> Base;
+	typedef XPeer<Server> Base;
+	typedef http_session<Server, plain_http_session<Server>> Handler;
 	boost::asio::ip::tcp::socket socket_;
-	boost::asio::strand<
-		boost::asio::io_context::executor_type>
-		strand_;
+	//boost::asio::strand<boost::asio::io_context::executor_type> strand_;
 
   public:
 	// Create the plain_http_session
 	plain_http_session(Server &srv, size_t id,
 					   boost::asio::ip::tcp::socket socket,
 					   std::string const &doc_root)
-		: Base(srv, MAKE_PEER_ID(PEER_TYPE_HTTP, id),
-										   socket.get_executor().context(),
-										   doc_root),
-		  socket_(std::move(socket)), strand_(socket_.get_executor())
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_HTTP, id))
+		, Handler(socket.get_executor().context(),doc_root)
+		, socket_(std::move(socket))
 	{
 	}
 	plain_http_session(Server &srv, size_t id,
 					   boost::asio::ip::tcp::socket socket,
 					   boost::beast::flat_buffer buffer,
 					   std::string const &doc_root)
-		: Base(srv, MAKE_PEER_ID(PEER_TYPE_HTTP, id),
-										   socket.get_executor().context(),
-										   std::move(buffer),
-										   doc_root),
-		  socket_(std::move(socket)), strand_(socket_.get_executor())
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_HTTP, id))
+		, Handler(socket.get_executor().context(),std::move(buffer),doc_root)
+		, socket_(std::move(socket))
 	{
 	}
 
 	~plain_http_session()
 	{
-		server().on_io_close(this);
+		derived().server().on_io_close(this);
 	}
 
 	// Called by the base class
@@ -1108,9 +1027,9 @@ class plain_http_session
 	{
 		// Run the timer. The timer is operated
 		// continuously, this simplifies the code.
-		on_timer({});
+		this->on_timer({});
 
-		do_read();
+		this->do_read();
 	}
 
 	bool is_open()
@@ -1152,15 +1071,15 @@ class plain_http_session
 // Handles an SSL HTTP connection
 template <class Server>
 class ssl_http_session
-	: public http_session<Server, ssl_http_session<Server>>,
+	: public http_session<Server, ssl_http_session<Server>>
+	, public XPeer<Server>
 	  public std::enable_shared_from_this<ssl_http_session<Server>>
 {
 	typedef ssl_http_session<Server> This;
-	typedef http_session<Server, ssl_http_session<Server>> Base;
+	typedef XPeer<Server> Base;
+	typedef http_session<Server, ssl_http_session<Server>> Handler;
 	ssl_stream<boost::asio::ip::tcp::socket> stream_;
-	boost::asio::strand<
-		boost::asio::io_context::executor_type>
-		strand_;
+	//boost::asio::strand<boost::asio::io_context::executor_type> strand_;
 	bool eof_ = false;
 
   public:
@@ -1169,10 +1088,9 @@ class ssl_http_session
 					 boost::asio::ip::tcp::socket socket,
 					 boost::asio::ssl::context &ctx,
 					 std::string const &doc_root)
-		: Base(srv, MAKE_PEER_ID(PEER_TYPE_HTTPS, id),
-										 socket.get_executor().context(),
-										 doc_root),
-		  stream_(std::move(socket), ctx), strand_(stream_.get_executor())
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_HTTPS, id))
+		, Handler(socket.get_executor().context(), doc_root)
+		, stream_(std::move(socket), ctx)
 	{
 	}
 	ssl_http_session(Server &srv, size_t id,
@@ -1180,17 +1098,15 @@ class ssl_http_session
 					 boost::asio::ssl::context &ctx,
 					 boost::beast::flat_buffer buffer,
 					 std::string const &doc_root)
-		: Base(srv, MAKE_PEER_ID(PEER_TYPE_HTTPS, id),
-										 socket.get_executor().context(),
-										 std::move(buffer),
-										 doc_root),
-		  stream_(std::move(socket), ctx), strand_(stream_.get_executor())
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_HTTPS, id))
+		, Handler(socket.get_executor().context(),std::move(buffer),doc_root)
+		, stream_(std::move(socket), ctx)
 	{
 	}
 
 	~ssl_http_session()
 	{
-		server().on_io_close(this);
+		derived().server().on_io_close(this);
 	}
 
 	bool is_open()
@@ -1251,7 +1167,7 @@ class ssl_http_session
 			return;
 
 		if (ec)
-			return on_fail(ec, "handshake");
+			return derived().on_fail(ec, "handshake");
 
 		// Consume the portion of the buffer used by the handshake
 		Base::buffer_.consume(bytes_used);
@@ -1285,7 +1201,7 @@ class ssl_http_session
 			return;
 
 		if (ec)
-			return on_fail(ec, "shutdown");
+			return derived().on_fail(ec, "shutdown");
 
 		// At this point the connection is closed gracefully
 	}
@@ -1314,16 +1230,14 @@ class ssl_http_session
 // Detects SSL handshakes
 template <class Server>
 class detect_session
-	: public XPeer<Server>,
-	  public std::enable_shared_from_this<detect_session<Server>>
+	: public XPeer<Server>
+	, public std::enable_shared_from_this<detect_session<Server>>
 {
 	typedef detect_session<Server> This;
 	typedef XPeer<Server> Base;
 	boost::asio::ip::tcp::socket socket_;
 	boost::asio::ssl::context &ctx_;
-	boost::asio::strand<
-		boost::asio::io_context::executor_type>
-		strand_;
+	boost::asio::strand<boost::asio::io_context::executor_type> strand_;
 	std::string const &doc_root_;
 	boost::beast::flat_buffer buffer_;
 
@@ -1358,12 +1272,12 @@ class detect_session
 	on_detect(const boost::system::error_code &ec, boost::tribool result)
 	{
 		if (ec)
-			return on_fail(ec, "detect");
+			return derived().on_fail(ec, "detect");
 
 		if (result)
 		{
 			// Launch SSL session
-			std::make_shared<ssl_http_session<Server>>(server(), id(),
+			std::make_shared<ssl_http_session<Server>>(this->server_, derived().id(),
 											   std::move(socket_),
 											   ctx_,
 											   std::move(buffer_),
@@ -1373,7 +1287,7 @@ class detect_session
 		}
 
 		// Launch plain session
-		std::make_shared<plain_http_session<Server>>(server(), id(),
+		std::make_shared<plain_http_session<Server>>(this->server_, derived().id(),
 											 std::move(socket_),
 											 std::move(buffer_),
 											 doc_root_)
@@ -1388,9 +1302,7 @@ class detect_session
 // WebSocket client
 template <class Server, class Derived>
 class websocket_client_session
-	: public XConnectPeer<Server, Derived>
 {
-	typedef XConnectPeer<Server, Derived> Base;
 	boost::beast::multi_buffer read_buffers_; //当前收到的包
 	//std::string read_buffer_; //buffer_ => string
 	//x_packet_t packet_;
@@ -1405,8 +1317,7 @@ class websocket_client_session
 
   public:
 	// Resolver and socket require an io_context
-	explicit websocket_client_session(Server &srv, size_t id, boost::asio::io_context &io_context)
-		: Base(srv, id, io_context)
+	explicit websocket_client_session()
 	{
 	}
 	~websocket_client_session()
@@ -1415,62 +1326,27 @@ class websocket_client_session
 
 	bool is_open()
 	{
-		return derived().ws().is_open();
+		return this->ws().is_open();
 	}
 
 	void close()
 	{
-		server().post_io_callback(id(),
+		derived().server().post_io_callback(derived().id(),
 					   boost::bind(&Derived::do_close,
-								   derived().shared_from_this()));
+								   this->derived().shared_from_this()));
 	}
 
 	void ping()
 	{
-		server().post_io_callback(id(),
+		derived().server().post_io_callback(derived().id(),
 					   boost::bind(&Derived::do_ping,
-								   derived().shared_from_this()));
+								   this->derived().shared_from_this()));
 	}
 
 	void do_ping()
 	{
 		//on_timer({});
 	}
-
-	/*x_packet_t& packet()
-	{
-		if (packet_.empty()) {
-			if (!read_buffer_.empty()) {
-				packet_.req_data = read_buffer_.data();
-				packet_.req_size = read_buffer_.size();
-				packet_.create_time = boost::posix_time::microsec_clock::local_time();
-			}
-			else {
-				derived().do_read();
-			}
-		}
-		return packet_;
-	}
-	void response(const char* buf, size_t len, bool is_last)
-	{
-		BOOST_ASSERT(is_last);
-		if (is_last) {
-			packet_.destroy_time = boost::posix_time::microsec_clock::local_time();
-		}
-		//发送回应,数据发完on_write会自动继续读
-		if (buf && len) {
-			derived().do_write(buf, len);
-		}
-	}
-	void on_packet_complete()
-	{
-		//清除请求
-		packet_.clear();
-
-		// Clear the buffer
-		read_buffers_.consume(read_buffers_.size());
-		read_buffer_.clear();
-	}*/
 
 	void do_write(const char *buf, size_t len)
 	{
@@ -1482,7 +1358,7 @@ class websocket_client_session
 		write_buffers_.emplace_back(buf, len);
 		if (write_complete_)
 		{
-			derived().do_write();
+			this->derived().do_write();
 		}
 	}
 
@@ -1500,9 +1376,9 @@ class websocket_client_session
 			this,
 			std::placeholders::_1,
 			std::placeholders::_2);
-		derived().ws().control_callback(control_callback_);
+		this->derived().ws().control_callback(control_callback_);
 
-		derived().do_resolve(addr, port);
+		this->derived().do_resolve(addr, port);
 	}
 
 	void
@@ -1517,8 +1393,8 @@ class websocket_client_session
 				std::placeholders::_1));
 #else
 		boost::system::error_code ec;
-		derived().ws().handshake(Resolver::addr(), "/", ec);
-		derived().on_handshake(ec);
+		this->derived().ws().handshake(this->addr(), "/", ec);
+		this->derived().on_handshake(ec);
 #endif //
 	}
 
@@ -1526,17 +1402,17 @@ class websocket_client_session
 	on_handshake(const boost::system::error_code &ec)
 	{
 		if (ec)
-			return on_fail(ec, "handshake");
+			return derived().on_fail(ec, "handshake");
 
-		server().on_io_connect(derived().shared_from_this());
-		derived().do_read();
+		derived().server().on_io_connect(derived().shared_from_this());
+		this->derived().do_read();
 	}
 
 	// Called to indicate activity from the remote peer
 	void
 	activity()
 	{
-		server().on_io_activity(derived().shared_from_this());
+		derived().server().on_io_activity(derived().shared_from_this());
 	}
 
 	// Called after a pong is sent.
@@ -1544,7 +1420,7 @@ class websocket_client_session
 	on_pong(const boost::system::error_code &ec)
 	{
 		if (ec)
-			return on_fail(ec, "pong");
+			return this->derived().on_fail(ec, "pong");
 
 		// Note that the pong was sent.
 	}
@@ -1556,12 +1432,12 @@ class websocket_client_session
 	{
 		//boost::ignore_unused(kind, payload);
 
-		derived().activity();
+		this->derived().activity();
 
 		if (kind == boost::beast::websocket::frame_type::ping)
 		{
 			// Now send the pong
-			derived().ws().async_pong({},
+			this->derived().ws().async_pong({},
 									  std::bind(
 										  &Derived::on_pong,
 										  derived().shared_from_this(),
@@ -1572,12 +1448,12 @@ class websocket_client_session
 	void do_write()
 	{
 		write_complete_ = false;
-		derived().ws().text(derived().ws().got_text());
-		derived().ws().async_write(
+		this->derived().ws().text(derived().ws().got_text());
+		this->derived().ws().async_write(
 			boost::asio::buffer(write_buffers_.front()),
 			std::bind(
 				&Derived::on_write,
-				derived().shared_from_this(),
+				this->derived().shared_from_this(),
 				std::placeholders::_1,
 				std::placeholders::_2));
 	}
@@ -1592,23 +1468,23 @@ class websocket_client_session
 		if (!ec)
 		{
 			std::string &buffer = write_buffers_.front();
-			server().on_io_write(derived().shared_from_this(), buffer);
+			derived().server().on_io_write(derived().shared_from_this(), buffer);
 			boost::mutex::scoped_lock lock(write_mutex_);
 			write_complete_ = true;
 			write_buffers_.pop_front();
 			if (!write_buffers_.empty())
-				derived().do_write();
+				this->derived().do_write();
 		}
 		else
 		{
-			return on_fail(ec, "write");
+			return this->derived().on_fail(ec, "write");
 		}
 	}
 
 	void do_read()
 	{
 		// Read a message into our buffer
-		derived().ws().async_read(
+		this->derived().ws().async_read(
 			read_buffers_,
 			std::bind(
 				&Derived::on_read,
@@ -1636,11 +1512,11 @@ class websocket_client_session
 			oss << boost::beast::buffers(read_buffers_.data());*/
 			std::string buffer = boost::beast::buffers_to_string(read_buffers_.data());
 			read_buffers_.consume(read_buffers_.size());
-			server().on_io_read(derived().shared_from_this(), buffer);
+			derived().server().on_io_read(derived().shared_from_this(), buffer);
 		}
 		else
 		{
-			on_fail(ec, "read");
+			derived().on_fail(ec, "read");
 		}
 	}
 
@@ -1658,7 +1534,7 @@ class websocket_client_session
 	on_close(const boost::system::error_code &ec)
 	{
 		if (ec)
-			return on_fail(ec, "close");
+			return derived().on_fail(ec, "close");
 
 		// If we get here then the connection is closed gracefully
 	}
@@ -1671,25 +1547,29 @@ class websocket_client_session
 // Handles a plain WebSocket connection
 template <class Server>
 class plain_websocket_client_session
-	: public websocket_client_session<Server, plain_websocket_client_session<Server>>,
-	  public std::enable_shared_from_this<plain_websocket_client_session<Server>>
+	: public websocket_client_session<Server, plain_websocket_client_session<Server>>
+	, public XClientPeer<Server,plain_websocket_client_session<Server>>
+	, public std::enable_shared_from_this<plain_websocket_client_session<Server>>
 {
 	typedef plain_websocket_client_session<Server> This;
-	typedef websocket_client_session<Server, plain_websocket_client_session<Server>> Base;
+	typedef XClientPeer<Server,plain_websocket_client_session<Server>> Base;
+	typedef websocket_client_session<Server, plain_websocket_client_session<Server>> Handler;
 	boost::beast::websocket::stream<boost::asio::ip::tcp::socket> ws_;
 
   public:
 	// Create the plain_websocket_client_session
 	explicit
 		// Handles a plain WebSocket connection
-		plain_websocket_client_session(Server &srv, size_t id, boost::asio::ip::tcp::socket sock)
-		: Base(srv, MAKE_PEER_ID(PEER_TYPE_WEBSOCKET_CLIENT, id), sock.get_executor().context()), ws_(std::move(sock))
+		plain_websocket_client_session(Server &srv, const size_t id, boost::asio::ip::tcp::socket& sock)
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_WEBSOCKET_CLIENT, id), sock.get_executor().context())
+		, Handler()
+		, ws_(std::move(sock))
 	{
 	}
 
 	~plain_websocket_client_session()
 	{
-		server().on_io_close(this);
+		derived().server().on_io_close(this);
 	}
 
 	boost::beast::websocket::stream<boost::asio::ip::tcp::socket> &
@@ -1701,7 +1581,7 @@ class plain_websocket_client_session
 	void
 	do_connect(boost::asio::ip::tcp::resolver::results_type results)
 	{
-		LOG4I("XPEER(%d) %s:%s  CONNECTING", id(), addr().c_str(), port().c_str());
+		LOG4I("XPEER(%d) %s:%s  CONNECTING", derived().id(), addr().c_str(), port().c_str());
 		// Make the connection on the IP address we get from a lookup
 		boost::asio::async_connect(
 			derived().ws().next_layer(),
@@ -1717,7 +1597,7 @@ class plain_websocket_client_session
 	on_connect(const boost::system::error_code &ec)
 	{
 		if (ec)
-			return on_fail(ec, "connect");
+			return derived().on_fail(ec, "connect");
 
 		do_handshake();
 	}
@@ -1730,23 +1610,27 @@ class plain_websocket_client_session
 // Handles an SSL WebSocket connection
 template <class Server>
 class ssl_websocket_client_session
-	: public websocket_client_session<Server, ssl_websocket_client_session<Server>>,
+	: public websocket_client_session<Server, ssl_websocket_client_session<Server>>
+	, public XClientPeer<Server, ssl_websocket_client_session<Server>>
 	  public std::enable_shared_from_this<ssl_websocket_client_session<Server>>
 {
 	typedef ssl_websocket_client_session<Server> This;
-	typedef websocket_client_session<Server, ssl_websocket_client_session<Server>> Base;
+	typedef XClientPeer<Server, ssl_websocket_client_session<Server>> Base;
+	typedef websocket_client_session<Server, ssl_websocket_client_session<Server>> Handler;
 	boost::beast::websocket::stream<ssl_stream<boost::asio::ip::tcp::socket>> ws_;
 
   public:
 	// Create the ssl_websocket_client_session
 	explicit ssl_websocket_client_session(Server &srv, size_t id, boost::asio::ip::tcp::socket sock, boost::asio::ssl::context &ctx)
-		: Base(srv, MAKE_PEER_ID(PEER_TYPE_SSL_WEBSOCKET_CLIENT, id), sock.get_executor().context()), ws_(std::move(sock), ctx)
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_SSL_WEBSOCKET_CLIENT, id), sock.get_executor().context())
+		, Handler()
+		, ws_(std::move(sock), ctx)
 	{
 	}
 
 	~ssl_websocket_client_session()
 	{
-		server().on_io_close(this);
+		derived().server().on_io_close(this);
 	}
 
 	// Called by the base class
@@ -1759,7 +1643,7 @@ class ssl_websocket_client_session
 	void
 	do_connect(boost::asio::ip::tcp::resolver::results_type results)
 	{
-		LOG4I("XPEER(%d) %s:%s  CONNECTING", id(), addr().c_str(), port().c_str());
+		LOG4I("XPEER(%d) %s:%s  CONNECTING", derived().id(), addr().c_str(), port().c_str());
 		// Make the connection on the IP address we get from a lookup
 		boost::asio::async_connect(
 			ws_.next_layer().next_layer(),
@@ -1775,7 +1659,7 @@ class ssl_websocket_client_session
 	on_connect(boost::system::error_code ec)
 	{
 		if (ec)
-			return on_fail(ec, "connect");
+			return derived().on_fail(ec, "connect");
 
 		do_ssl_handshake();
 	}
@@ -1797,7 +1681,7 @@ class ssl_websocket_client_session
 	on_ssl_handshake(boost::system::error_code ec)
 	{
 		if (ec)
-			return on_fail(ec, "ssl_handshake");
+			return derived().on_fail(ec, "ssl_handshake");
 
 		do_handshake();
 	}

@@ -1,5 +1,5 @@
-#ifndef __H_XNET_XSOCKET_HPP__
-#define __H_XNET_XSOCKET_HPP__
+#ifndef __H_XNET_XTcpHandler_HPP__
+#define __H_XNET_XTcpHandler_HPP__
 
 #pragma once
 
@@ -10,23 +10,21 @@ namespace XNet {
 
 #if XSERVER_PROTOTYPE_TCP
 
-// XSocket
+// XTcpHandler
 template <class Server, class Derived>
-class XSocket : public XPeer<Server>
+class XTcpHandler
 {
-	typedef XSocket<Server,Derived> This;
-	typedef XPeer<Server> Base;
+	typedef XTcpHandler<Server,Derived> This;
   public:
-	XSocket(Server &srv, size_t id)
-		: Base(srv, id), recv_buffer_(srv.max_buffer_size())
+	XTcpHandler()
+		: recv_buffer_(srv.max_buffer_size())
 		  //, send_buffer_(srv.max_buffer_size()), write_buffer_(srv.max_buffer_size())
-		  ,
-		  write_complete(true)
+		  , write_complete(true)
 	{
 		recv_buffer_.ensureWritable(srv.max_buffer_size());
 	}
 
-	~XSocket()
+	~XTcpHandler()
 	{
 	}
 
@@ -107,52 +105,6 @@ class XSocket : public XPeer<Server>
 			derived().sock().close(ec);
 		}
 	}
-
-	// x_packet_t& packet()
-	// {
-	// 	if (packet_.empty()) {
-	// 		int len = server().parse_buffer(derived().shared_from_this(), recv_buffer_.data(), recv_buffer_.size());
-	// 		if (len > 0) {
-	// 			/*//内存整理
-	// 			if (recv_buffer_.capacity()>10*server().max_buffer_size_) {
-	// 				recv_buffer_.shrink();
-	// 			}*/
-	// 			packet_.req_data = recv_buffer_.data();
-	// 			packet_.req_size = len;
-	// 			packet_.create_time = boost::posix_time::microsec_clock::local_time();
-	// 		}
-	// 		else if (len < 0) {
-	// 			boost::asio::ip::tcp::endpoint ep = get_remote_endpoint();
-	// 			std::string str = ep.address().to_string();
-	// 			LOG4E("XPEER(%d) %s:%d READ PACKAGE ERROR", id(), str.c_str(), ep.port());
-	// 			derived().do_close();
-	// 		}
-	// 		else {
-	// 			do_read(); //需要继续读
-	// 		}
-	// 	}
-	// 	return packet_;
-	// }
-
-	// void response(const char* buf, size_t len, bool is_last)
-	// {
-	// 	if (is_last) {
-	// 		packet_.destroy_time = boost::posix_time::microsec_clock::local_time();
-	// 	}
-	// 	if (buf && len) {
-	// 		do_write(buf, len);
-	// 	}
-	// }
-
-	// void on_packet_complete()
-	// {
-	// 	//请求处理完成
-	// 	size_t req_size = packet_.req_size;
-	// 	//清除请求
-	// 	packet_.clear();
-	// 	//移出已处理请求缓存
-	// 	recv_buffer_.retrieve(req_size);
-	// }
 
 	void do_write(const char *buf, size_t len)
 	{
@@ -240,8 +192,6 @@ class XSocket : public XPeer<Server>
 	}
 
   protected:
-	//x_packet_t packet_;
-	//char read_buffer_[1024];
 	XBuffer recv_buffer_;
 	XBuffer send_buffer_;
 	XBuffer write_buffer_;
@@ -253,15 +203,17 @@ class XSocket : public XPeer<Server>
 
 template <class Server>
 class XWorker
-	: public XSocket<Server, XWorker<Server>>,
+	: public XPeer<Server, XWorker<Server>>
+	, public XTcpHandler<Server, XWorker<Server>>,
 	  public std::enable_shared_from_this<XWorker<Server>>,
 	  private boost::noncopyable
 {
 	typedef XWorker<Server> This;
-	typedef XSocket<Server, XWorker<Server>> Base;
+	typedef XPeer<Server, XWorker<Server>> Base;
+	typedef XTcpHandler<Server, XWorker<Server>> Handler;
   public:
 	XWorker(Server &srv, size_t id, boost::asio::ip::tcp::socket sock)
-		: Base(srv, MAKE_PEER_ID(PEER_TYPE_TCP, id)), sock_(std::move(sock))
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_TCP, id)), Handler(), sock_(std::move(sock))
 	{
 	}
 
@@ -289,17 +241,17 @@ class XWorker
 
 template <class Server>
 class XConnector
-	: public XSocket<Server, XConnector<Server>>,
-	  public XResolver<Server, XConnector<Server>>,
+	: public XClientPeer<Server,XConnector<Server>>
+	, public XTcpHandler<Server, XConnector<Server>>,
 	  public std::enable_shared_from_this<XConnector<Server>>,
 	  private boost::noncopyable
 {
-	typedef XConnector<Server> This;
-	typedef XSocket<Server, XConnector<Server>> Base;
-	typedef XResolver<Server, XConnector<Server>> Resolver;
+	typedef XTcpClient<Server> This;
+	typedef XClientPeer<Server,XConnector<Server>> Base;
+	typedef XTcpHandler<Server, XConnector<Server>> Handler;
   public:
-	XConnector(Server &srv, size_t id, boost::asio::ip::tcp::socket sock)
-		: Base(srv, MAKE_PEER_ID(PEER_TYPE_TCP_CLIENT, id)), Resolver(sock.get_executor().context()), sock_(std::move(sock))
+	XConnector(Server &srv, size_t id, boost::asio::ip::tcp::socket& sock)
+		: Base(srv, MAKE_PEER_ID(PEER_TYPE_TCP_CLIENT, id)), Handler(), sock_(std::move(sock))
 	{
 	}
 
@@ -313,46 +265,6 @@ class XConnector
 		return sock_;
 	}
 
-	void run(const std::string &addr, const std::string &port)
-	{
-		do_resolve(addr, port);
-	}
-
-	void do_connect(const boost::asio::ip::tcp::resolver::results_type &results)
-	{
-		LOG4I("XPEER(%d) %s:%s  CONNECTING", id(), addr().c_str(), port().c_str());
-		//sock_.async_connect(ep, boost::bind(&XConnector::on_connect
-		//	, shared_from_this()
-		//	, boost::asio::placeholders::error));
-		// Make the connection on the IP address we get from a lookup
-		boost::asio::async_connect(
-			sock_,
-			results.begin(),
-			results.end(),
-			std::bind(
-				&This::on_connect,
-				shared_from_this(),
-				std::placeholders::_1));
-	}
-
-  protected:
-	void on_connect(const boost::system::error_code &ec)
-	{
-		if (!ec)
-		{
-			server().on_io_connect(shared_from_this());
-			sock_.set_option(boost::asio::ip::tcp::no_delay(true));
-			do_read();
-		}
-		else
-		{
-			boost::asio::ip::tcp::endpoint ep = get_remote_endpoint();
-			std::string str = ep.address().to_string();
-			LOG4E("XPEER(%d) %s:%d CONNECT ERROR: %d", id(), str.c_str(), ep.port(), ec.value());
-			do_close();
-		}
-	}
-
   protected:
 	boost::asio::ip::tcp::socket sock_;
 };
@@ -361,4 +273,4 @@ class XConnector
 
 }
 
-#endif //__H_XNET_XSOCKET_HPP__
+#endif //__H_XNET_XTcpHandler_HPP__
