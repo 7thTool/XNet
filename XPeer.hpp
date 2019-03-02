@@ -8,7 +8,7 @@
 
 namespace XNet {
 
-template<class Server>
+template<class Server, class Derived>
 class XPeer
 {
 protected:
@@ -16,33 +16,74 @@ protected:
 	size_t id_;
 	boost::any context_;
 public:
-  XPeer(Server &srv, size_t id)
-	  : server_(srv), id_(id)
-  {
-  }
+	XPeer(Server &srv, size_t id)
+		: server_(srv), id_(id)
+	{
+	}
 
-  ~XPeer()
-  {
-  }
+	~XPeer()
+	{
+	}
 
-  inline Server &server() { return server_; }
+	inline Derived & derived() { return static_cast<Derived &>(*this); }
 
-  inline size_t id() { return id_; }
+	inline Server &server() { return server_; }
 
-  inline void set_context(boost::any context)
-  {
-	  context_ = context;
-  }
+	inline size_t id() { return id_; }
 
-  inline const boost::any &context()
-  {
-	  return context_;
-  }
+	inline void set_context(boost::any context) { context_ = context; }
+	inline const boost::any &context() { return context_; }
+  
+	boost::asio::ip::tcp::endpoint get_remote_endpoint()
+	{
+		boost::system::error_code ec;
+		return derived().sock().remote_endpoint(ec);
+	}
 
-  inline void on_fail(boost::system::error_code ec, char const *what)
-  {
-	  fail(ec, what);
-  }
+	std::string get_remote_ip() const
+	{
+		boost::system::error_code ec;
+		auto endpoint = derived().sock().remote_endpoint(ec);
+		if (ec)
+			return "";
+		auto address = endpoint.address();
+		return address.to_string();
+	};
+
+	unsigned short get_remote_port() const
+	{
+		boost::system::error_code ec;
+		auto endpoint = derived().sock().remote_endpoint(ec);
+		if (ec)
+			return (unsigned short)-1;
+		return endpoint.port();
+	};
+
+	std::string get_local_ip() const
+	{
+		boost::system::error_code ec;
+		auto endpoint = derived().sock().local_endpoint(ec);
+		if (ec)
+			return "";
+		auto address = endpoint.address();
+		return address.to_string();
+	}
+
+	unsigned short get_local_port() const
+	{
+		boost::system::error_code ec;
+		auto endpoint = derived().sock().local_endpoint(ec);
+		if (ec)
+			return (unsigned short)-1;
+		return endpoint.port();
+	}
+
+	inline void on_fail(boost::system::error_code ec, char const *what)
+	{
+		boost::asio::ip::tcp::endpoint ep = derived().get_remote_endpoint();
+		std::string str = ep.address().to_string();
+		LOG4E("peer(%d) %s:%d waht=%s error=%s", id(), str.c_str(), ep.port(), what, ec.message().c_str());
+	}
 };
 
 template<class Derived>
@@ -61,11 +102,7 @@ public:
 		
 	}
 
-	inline Derived&
-		derived()
-	{
-		return static_cast<Derived&>(*this);
-	}
+	inline Derived& derived() { return static_cast<Derived&>(*this); }
 
 	inline std::string& addr() {
 		return addr_;
@@ -110,19 +147,20 @@ protected:
 
 template<class Server, class Derived>
 class XClientPeer 
-	: public XPeer<Server>
+	: public XPeer<Server,Derived>
 	, public XResolver<Derived>
 {
-	typedef XPeer<Server> Base;
+	typedef XPeer<Server,Derived> Base;
 public:
 	typedef XResolver<Derived> Resolver;
 protected:
 	boost::asio::steady_timer timer_;
 	size_t timeout_;
+	bool reconnect_;
 public:
-	XClientPeer(Server &srv, size_t id, boost::asio::io_context &io_context, size_t timeout)
+	XClientPeer(Server &srv, size_t id, boost::asio::io_context &io_context, size_t timeout = 0)
 		: Base(srv, id), Resolver(io_context)
-		, timer_(io_context,(std::chrono::steady_clock::time_point::max)()), timeout_(0)
+		, timer_(io_context,(std::chrono::steady_clock::time_point::max)()), timeout_(timeout), reconnect_(false)
 	{
 	}
 
@@ -130,11 +168,7 @@ public:
 	{
 	}
 
-	inline Derived&
-		derived()
-	{
-		return static_cast<Derived&>(*this);
-	}
+	inline Derived& derived() { return static_cast<Derived&>(*this); }
 
 	inline void set_reconnect_timeout(size_t millis) { timeout_ = millis; }
 	inline size_t get_reconnect_timeout() { return timeout_; }
@@ -143,7 +177,22 @@ public:
  	// Start the asynchronous operation
 	void run(const std::string &addr, const std::string &port)
 	{
+		reconnect_ = false;
 		derived().do_resolve(addr, port);
+	}
+
+	void reconnect()
+	{
+		reconnect_ = false;
+		derived().run(addr(), port());
+	}
+
+	void do_close() {
+		if(reconnect_) {
+			reconnect_ = false;
+			boost::system::error_code ec;
+			timer_.cancel(ec);
+		}
 	}
 
 	void on_resolve(const boost::system::error_code& ec
@@ -178,21 +227,28 @@ public:
 	{
 		if (!ec)
 		{
-			timer_.expires_after(std::chrono::steady_clock::time_point::max);
 			server().on_io_connect(shared_from_this());
 			sock_.set_option(boost::asio::ip::tcp::no_delay(true));
 			do_read();
 		}
 		else
 		{
-			boost::asio::ip::tcp::endpoint ep = get_remote_endpoint();
-			std::string str = ep.address().to_string();
-			LOG4E("XPEER(%d) %s:%d CONNECT ERROR: %d", id(), str.c_str(), ep.port(), ec.value());
+			//boost::asio::ip::tcp::endpoint ep = get_remote_endpoint();
+			//std::string str = ep.address().to_string();
+			//LOG4E("XPEER(%d) %s:%d CONNECT ERROR: %d", id(), str.c_str(), ep.port(), ec.value());
 			derived().do_reconnect();
 		}
 	}
 
-	void do_reconnect() {
+	inline void do_reconnect() {
+		if(!timeout_) {
+			return;
+		}
+		if(reconnect_) {
+			return;
+		}
+		reconnect_ = false;
+
 		timer_.expires_after(std::chrono::milliseconds(timeout_));
 		on_reconnect_timer({});
 	}
@@ -201,15 +257,14 @@ public:
 	void on_reconnect_timer(const boost::system::error_code &ec)
 	{
 		if (ec && ec != boost::asio::error::operation_aborted)
-			return derived().on_fail(ec, "connect_timeout");
+			return derived().on_fail(ec, "reconnect_timer");
 
-		if (!derived().is_open()) {
+		if (!derived().is_open()) 
 			return;
-		}
 
 		// Verify that the timer really expired since the deadline may have moved.
 		if (timer_.expiry() <= std::chrono::steady_clock::now())
-			return derived().run(derived().addr(), derived().port());
+			return derived().run();
 
 		// Wait on the timer
 		timer_.async_wait(

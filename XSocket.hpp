@@ -1,5 +1,5 @@
-#ifndef __H_XNET_XTcpHandler_HPP__
-#define __H_XNET_XTcpHandler_HPP__
+#ifndef __H_XNET_tcp_session_HPP__
+#define __H_XNET_tcp_session_HPP__
 
 #pragma once
 
@@ -10,88 +10,34 @@ namespace XNet {
 
 #if XSERVER_PROTOTYPE_TCP
 
-// XTcpHandler
-template <class Server, class Derived>
-class XTcpHandler
+// tcp_session
+template <class Derived>
+class tcp_session
 {
-	typedef XTcpHandler<Server,Derived> This;
+	typedef tcp_session<Derived> This;
   public:
-	XTcpHandler()
-		: recv_buffer_(srv.max_buffer_size())
-		  //, send_buffer_(srv.max_buffer_size()), write_buffer_(srv.max_buffer_size())
-		  , write_complete(true)
+	tcp_session()
+		: recv_buffer_(derived().server().max_buffer_size())
+		//, send_buffer_(derived().server().max_buffer_size()), write_buffer_(derived().server().max_buffer_size())
+		, write_complete(true)
 	{
-		recv_buffer_.ensureWritable(srv.max_buffer_size());
+		recv_buffer_.ensureWritable(derived().server().max_buffer_size());
 	}
 
-	~XTcpHandler()
+	~tcp_session()
 	{
 	}
 
-	Derived &
-	derived()
-	{
-		return static_cast<Derived &>(*this);
-	}
+	inline Derived & derived() { return static_cast<Derived &>(*this); }
 
-	boost::asio::ip::tcp::endpoint get_remote_endpoint()
-	{
-		boost::system::error_code ec;
-		return derived().sock().remote_endpoint(ec);
-	}
-
-	std::string get_remote_ip() const
-	{
-		boost::system::error_code ec;
-		auto endpoint = derived().sock().remote_endpoint(ec);
-		if (ec)
-			return "";
-		auto address = endpoint.address();
-		return address.to_string();
-	};
-
-	unsigned short get_remote_port() const
-	{
-		boost::system::error_code ec;
-		auto endpoint = derived().sock().remote_endpoint(ec);
-		if (ec)
-			return (unsigned short)-1;
-		return endpoint.port();
-	};
-	std::string get_local_ip() const
-	{
-		boost::system::error_code ec;
-		auto endpoint = derived().sock().local_endpoint(ec);
-		if (ec)
-			return "";
-		auto address = endpoint.address();
-		return address.to_string();
-	}
-
-	unsigned short get_local_port() const
-	{
-		boost::system::error_code ec;
-		auto endpoint = derived().sock().local_endpoint(ec);
-		if (ec)
-			return (unsigned short)-1;
-		return endpoint.port();
-	}
-
-	void on_fail(boost::system::error_code ec, char const *what)
-	{
-		boost::asio::ip::tcp::endpoint ep = derived().get_remote_endpoint();
-		std::string str = ep.address().to_string();
-		LOG4E("peer(%d) %s:%d waht=%s error=%s", id(), str.c_str(), ep.port(), what, ec.message().c_str());
-	}
-
-	bool is_open()
+	inline bool is_open()
 	{
 		return derived().sock().is_open();
 	}
 
-	void close()
+	inline void close()
 	{
-		server().PostIO(id(),
+		derived().server().post_io_callback(id(),
 					   boost::bind(&Derived::do_close,
 								   derived().shared_from_this()));
 	}
@@ -106,11 +52,11 @@ class XTcpHandler
 		}
 	}
 
-	void do_write(const char *buf, size_t len)
+	inline void do_write(const char *buf, size_t len)
 	{
 		BOOST_ASSERT(is_open());
 #ifdef _DEBUG
-		LOG4I("XPEER(%d) WRITE %d", id(), len);
+		LOG4I("XPEER(%d) WRITE %d", derived().id(), len);
 #endif //
 		boost::mutex::scoped_lock lock(write_mutex_);
 		send_buffer_.append(buf, len);
@@ -122,7 +68,7 @@ class XTcpHandler
 		}
 	}
 
-	void do_read()
+	inline void do_read()
 	{
 		derived().sock().async_read_some(boost::asio::buffer(recv_buffer_.writer(), recv_buffer_.writable()),
 										 boost::bind(&Derived::on_read, derived().shared_from_this(),
@@ -135,27 +81,26 @@ class XTcpHandler
 		if (!ec)
 		{
 #ifdef _DEBUG
-			LOG4I("XPEER(%d) ON_READ %d", id(), bytes_transferred);
+			LOG4I("XPEER(%d) ON_READ %d", derived().id(), bytes_transferred);
 #endif //
 			/*boost::mutex::scoped_lock lock(mutex_);
 			recv_buffer_.append(read_buffer_, bytes_transferred);
 			lock.unlock();
-			server().on_io_read(shared_from_this(), read_buffer_, bytes_transferred);*/
+			derived().server().on_io_read(shared_from_this(), read_buffer_, bytes_transferred);*/
 			const char *buf = recv_buffer_.data();
 			recv_buffer_.write(bytes_transferred);
-			server().on_io_read(derived().shared_from_this(), recv_buffer_);
+			derived().server().on_io_read(derived().shared_from_this(), recv_buffer_);
 			//AsyncRead(); 这里不主动读，等work处理完读到的数据再继续AsyncRead
 		}
 		else
 		{
-			boost::asio::ip::tcp::endpoint ep = get_remote_endpoint();
+			boost::asio::ip::tcp::endpoint ep = derived().get_remote_endpoint();
 			std::string str = ep.address().to_string();
-			LOG4E("XPEER(%d) %s:%d READ ERROR: %d", id(), str.c_str(), ep.port(), ec.value());
-			derived().do_close();
+			LOG4E("XPEER(%d) %s:%d READ ERROR: %d", derived().id(), str.c_str(), ep.port(), ec.value());
 		}
 	}
 
-	void do_write()
+	inline void do_write()
 	{
 		write_complete = false;
 
@@ -172,9 +117,9 @@ class XTcpHandler
 		{
 			BOOST_ASSERT(write_buffer_.size() == bytes_transferred);
 #ifdef _DEBUG
-			LOG4I("XPEER(%d) ON_WRITE %d", id(), bytes_transferred);
+			LOG4I("XPEER(%d) ON_WRITE %d", derived().id(), bytes_transferred);
 #endif //
-			server().on_io_write(derived().shared_from_this(), write_buffer_);
+			derived().server().on_io_write(derived().shared_from_this(),write_buffer_);
 			boost::mutex::scoped_lock lock(write_mutex_);
 			write_complete = true;
 			write_buffer_.clear();
@@ -184,10 +129,9 @@ class XTcpHandler
 		}
 		else
 		{
-			boost::asio::ip::tcp::endpoint ep = get_remote_endpoint();
+			boost::asio::ip::tcp::endpoint ep = derived().get_remote_endpoint();
 			std::string str = ep.address().to_string();
-			LOG4E("XPEER(%d) %s:%d WRITE ERROR: %d", id(), str.c_str(), ep.port(), ec.value());
-			derived().do_close();
+			LOG4E("XPEER(%d) %s:%d WRITE ERROR: %d", derived().id(), str.c_str(), ep.port(), ec.value());
 		}
 	}
 
@@ -204,13 +148,13 @@ class XTcpHandler
 template <class Server>
 class XWorker
 	: public XPeer<Server, XWorker<Server>>
-	, public XTcpHandler<Server, XWorker<Server>>,
-	  public std::enable_shared_from_this<XWorker<Server>>,
-	  private boost::noncopyable
+	, public tcp_session<XWorker<Server>>
+	, public std::enable_shared_from_this<XWorker<Server>>
+	, private boost::noncopyable
 {
 	typedef XWorker<Server> This;
 	typedef XPeer<Server, XWorker<Server>> Base;
-	typedef XTcpHandler<Server, XWorker<Server>> Handler;
+	typedef tcp_session<XWorker<Server>> Handler;
   public:
 	XWorker(Server &srv, size_t id, boost::asio::ip::tcp::socket sock)
 		: Base(srv, MAKE_PEER_ID(PEER_TYPE_TCP, id)), Handler(), sock_(std::move(sock))
@@ -222,17 +166,14 @@ class XWorker
 		server().on_io_close(this);
 	}
 
-	boost::asio::ip::tcp::socket &sock()
-	{
-		return sock_;
-	}
+	inline boost::asio::ip::tcp::socket &sock() { return sock_; }
 
-	void run()
+	inline void run()
 	{
 		boost::asio::ip::tcp::endpoint ep = get_remote_endpoint();
 		std::string str = ep.address().to_string();
 		LOG4I("XPEER(%d) %s:%d  CONNECTED", id(), str.c_str(), ep.port());
-		return do_read();
+		do_read();
 	}
 
   protected:
@@ -242,13 +183,13 @@ class XWorker
 template <class Server>
 class XConnector
 	: public XClientPeer<Server,XConnector<Server>>
-	, public XTcpHandler<Server, XConnector<Server>>,
-	  public std::enable_shared_from_this<XConnector<Server>>,
-	  private boost::noncopyable
+	, public tcp_session<XWorker<Server>>
+	, public std::enable_shared_from_this<XConnector<Server>>
+	, private boost::noncopyable
 {
-	typedef XTcpClient<Server> This;
+	typedef XConnector<Server> This;
 	typedef XClientPeer<Server,XConnector<Server>> Base;
-	typedef XTcpHandler<Server, XConnector<Server>> Handler;
+	typedef tcp_session<XWorker<Server>> Handler;
   public:
 	XConnector(Server &srv, size_t id, boost::asio::ip::tcp::socket& sock)
 		: Base(srv, MAKE_PEER_ID(PEER_TYPE_TCP_CLIENT, id)), Handler(), sock_(std::move(sock))
@@ -260,10 +201,7 @@ class XConnector
 		server().on_io_close(this);
 	}
 
-	boost::asio::ip::tcp::socket &sock()
-	{
-		return sock_;
-	}
+	inline boost::asio::ip::tcp::socket &sock() { return sock_; }
 
   protected:
 	boost::asio::ip::tcp::socket sock_;
@@ -273,4 +211,4 @@ class XConnector
 
 }
 
-#endif //__H_XNET_XTcpHandler_HPP__
+#endif //__H_XNET_tcp_session_HPP__
