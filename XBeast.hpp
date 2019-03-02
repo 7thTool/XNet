@@ -46,7 +46,7 @@ namespace XNet {
 // Echoes back all received WebSocket messages.
 // This uses the Curiously Recurring Template Pattern so that
 // the same code works with both SSL streams and regular sockets.
-template <class Server, class Derived>
+template <class Derived>
 class websocket_session
 {
 	// Access the derived class, this is part of
@@ -403,12 +403,12 @@ class websocket_session
 // Handles a plain WebSocket connection
 template <class Server>
 class plain_websocket_session
-	: public websocket_session<Server, plain_websocket_session<Server>>
-	, public XPeer<Server, plain_websocket_session<Server>>
+	: public XPeer<Server, plain_websocket_session<Server>>
+	, public websocket_session<plain_websocket_session<Server>>
 	, public std::enable_shared_from_this<plain_websocket_session<Server>>
 {
 	typedef XPeer<Server, plain_websocket_session<Server>> Base;
-	typedef websocket_session<Server, plain_websocket_session<Server>> Handler;
+	typedef websocket_session<plain_websocket_session<Server>> Handler;
 	boost::beast::websocket::stream<boost::asio::ip::tcp::socket> ws_;
 	bool close_ = false;
 
@@ -520,11 +520,11 @@ class plain_websocket_session
 template <class Server>
 class ssl_websocket_session
 	: public XPeer<Server, ssl_websocket_session<Server>>
-	, public websocket_session<Server, ssl_websocket_session<Server>>
+	, public websocket_session<ssl_websocket_session<Server>>
 	, public std::enable_shared_from_this<ssl_websocket_session<Server>>
 {
 	typedef XPeer<Server, ssl_websocket_session<Server>> Base;
-	typedef websocket_session<Server, ssl_websocket_session<Server>> Handler;
+	typedef websocket_session<ssl_websocket_session<Server>> Handler;
 	boost::beast::websocket::stream<ssl_stream<boost::asio::ip::tcp::socket>> ws_;
 	//boost::asio::strand<boost::asio::io_context::executor_type> strand_;
 	bool eof_ = false;
@@ -693,7 +693,7 @@ void upgrade_websocket_session(Server &srv, size_t id,
 // Handles an HTTP server connection.
 // This uses the Curiously Recurring Template Pattern so that
 // the same code works with both SSL streams and regular sockets.
-template <class Server, class Derived>
+template <class Derived>
 class http_session
 {
 	// Access the derived class, this is part of
@@ -928,12 +928,12 @@ class http_session
 // Handles a plain HTTP connection
 template <class Server>
 class plain_http_session
-	: public http_session<Server, plain_http_session<Server>>
-	, public XPeer<Server, plain_http_session<Server>>
+	: public XPeer<Server, plain_http_session<Server>>
+	, public http_session<plain_http_session<Server>>
 	, public std::enable_shared_from_this<plain_http_session<Server>>
 {
 	typedef XPeer<Server, plain_http_session<Server>> Base;
-	typedef http_session<Server, plain_http_session<Server>> Handler;
+	typedef http_session<plain_http_session<Server>> Handler;
 	boost::asio::ip::tcp::socket socket_;
 	//boost::asio::strand<boost::asio::io_context::executor_type> strand_;
 
@@ -1017,11 +1017,11 @@ class plain_http_session
 template <class Server>
 class ssl_http_session
 	: public XPeer<Server,ssl_http_session<Server>>
-	, public http_session<Server,ssl_http_session<Server>>
+	, public http_session<ssl_http_session<Server>>
 	, public std::enable_shared_from_this<ssl_http_session<Server>>
 {
 	typedef XPeer<Server,ssl_http_session<Server>> Base;
-	typedef http_session<Server,ssl_http_session<Server>> Handler;
+	typedef http_session<ssl_http_session<Server>> Handler;
 	ssl_stream<boost::asio::ip::tcp::socket> stream_;
 	//boost::asio::strand<boost::asio::io_context::executor_type> strand_;
 	bool eof_ = false;
@@ -1234,7 +1234,7 @@ class detect_session
 #if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_WEBSOCKET
 
 // WebSocket client
-template <class Server, class Derived>
+template <class Derived>
 class websocket_client_session
 {
 	boost::beast::multi_buffer read_buffers_; //当前收到的包
@@ -1484,11 +1484,11 @@ class websocket_client_session
 template <class Server>
 class plain_websocket_client_session
 	: public XClientPeer<Server,plain_websocket_client_session<Server>>
-	, public websocket_client_session<Server, plain_websocket_client_session<Server>>
+	, public websocket_client_session<plain_websocket_client_session<Server>>
 	, public std::enable_shared_from_this<plain_websocket_client_session<Server>>
 {
 	typedef XClientPeer<Server,plain_websocket_client_session<Server>> Base;
-	typedef websocket_client_session<Server, plain_websocket_client_session<Server>> Handler;
+	typedef websocket_client_session<plain_websocket_client_session<Server>> Handler;
 	boost::beast::websocket::stream<boost::asio::ip::tcp::socket> ws_;
 
   public:
@@ -1553,11 +1553,11 @@ class plain_websocket_client_session
 template <class Server>
 class ssl_websocket_client_session
 	: public XClientPeer<Server, ssl_websocket_client_session<Server>>
-	, public websocket_client_session<Server, ssl_websocket_client_session<Server>>
+	, public websocket_client_session<ssl_websocket_client_session<Server>>
 	, public std::enable_shared_from_this<ssl_websocket_client_session<Server>>
 {
 	typedef XClientPeer<Server, ssl_websocket_client_session<Server>> Base;
-	typedef websocket_client_session<Server, ssl_websocket_client_session<Server>> Handler;
+	typedef websocket_client_session<ssl_websocket_client_session<Server>> Handler;
 	boost::beast::websocket::stream<ssl_stream<boost::asio::ip::tcp::socket>> ws_;
 
   public:
