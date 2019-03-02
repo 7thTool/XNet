@@ -6,7 +6,7 @@
 #include "XType.hpp"
 #include "XSocket.hpp"
 #include "XBeast.hpp"
-#include <XUtil/XLogger.hpp>
+#include "XUtil.hpp"
 #include <boost/circular_buffer.hpp>
 #include <boost/unordered_set.hpp>
 #include <boost/version.hpp>
@@ -18,12 +18,12 @@ template <class Server>
 class XIdleService
 {
 #if XSERVER_PROTOTYPE_TCP 
-typedef XWorker<Server> xworker_t; 
-typedef XConnector<Server> xconnector_t; 
-typedef std::shared_ptr<xworker_t> xworker_ptr; 
-typedef std::weak_ptr<xworker_t> xworker_weak_ptr; 
-typedef std::shared_ptr<xconnector_t> xconnector_ptr; 
-typedef std::weak_ptr<xconnector_t> xconnector_weak_ptr; 
+typedef tcp_peer_session<Server> tcp_t; 
+typedef tcp_client_session<Server> tcp_clt_t; 
+typedef std::shared_ptr<tcp_t> tcp_ptr; 
+typedef std::weak_ptr<tcp_t> tcp_weak_ptr; 
+typedef std::shared_ptr<tcp_clt_t> tcp_clt_ptr; 
+typedef std::weak_ptr<tcp_clt_t> tcp_clt_weak_ptr; 
 #endif 
 #if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS
 typedef plain_http_session<Server> http_t; 
@@ -94,22 +94,22 @@ typedef XIdleService<Server> This;
 
 #if XSERVER_PROTOTYPE_TCP
 
-	void add(xworker_ptr peer_ptr)
+	void add(tcp_ptr peer_ptr)
 	{
 		service_.post(boost::bind(&This::on_add_worker, this, peer_ptr));
 	}
 
-	void add(xconnector_ptr peer_ptr)
+	void add(tcp_clt_ptr peer_ptr)
 	{
 		service_.post(boost::bind(&This::on_add_connector, this, peer_ptr));
 	}
 
-	void active(xworker_ptr peer_ptr)
+	void active(tcp_ptr peer_ptr)
 	{
 		service_.post(boost::bind(&This::on_active_worker, this, peer_ptr));
 	}
 
-	void active(xconnector_ptr peer_ptr)
+	void active(tcp_clt_ptr peer_ptr)
 	{
 		service_.post(boost::bind(&This::on_active_connector, this, peer_ptr));
 	}
@@ -174,38 +174,38 @@ typedef XIdleService<Server> This;
   private:
   #if XSERVER_PROTOTYPE_TCP
 
-	void on_add_worker(xworker_ptr peer_ptr)
+	void on_add_worker(tcp_ptr peer_ptr)
 	{
-		xworker_entry_ptr entry_ptr(new xworker_entry(peer_ptr));
+		tcp_entry_ptr entry_ptr(new tcp_entry(peer_ptr));
 		worker_wheel_list_.back().insert(entry_ptr);
-		xworker_entry_weak_ptr entry_weak_ptr(entry_ptr);
+		tcp_entry_weak_ptr entry_weak_ptr(entry_ptr);
 		peer_ptr->set_context(entry_weak_ptr);
 	}
 
-	void on_add_connector(xconnector_ptr peer_ptr)
+	void on_add_connector(tcp_clt_ptr peer_ptr)
 	{
-		xconnector_entry_ptr entry_ptr(new xconnector_entry(peer_ptr));
+		tcp_clt_entry_ptr entry_ptr(new tcp_clt_entry(peer_ptr));
 		connector_wheel_list_.back().insert(entry_ptr);
-		xconnector_entry_weak_ptr entry_weak_ptr(entry_ptr);
+		tcp_clt_entry_weak_ptr entry_weak_ptr(entry_ptr);
 		peer_ptr->set_context(entry_weak_ptr);
 	}
 
-	void on_active_worker(xworker_ptr peer_ptr)
+	void on_active_worker(tcp_ptr peer_ptr)
 	{
 		BOOST_ASSERT(!peer_ptr->context().empty());
-		xworker_entry_weak_ptr entry_weak_ptr(boost::any_cast<xworker_entry_weak_ptr>(peer_ptr->context()));
-		xworker_entry_ptr entry_ptr(entry_weak_ptr.lock());
+		tcp_entry_weak_ptr entry_weak_ptr(boost::any_cast<tcp_entry_weak_ptr>(peer_ptr->context()));
+		tcp_entry_ptr entry_ptr(entry_weak_ptr.lock());
 		if (entry_ptr)
 		{
 			worker_wheel_list_.back().insert(entry_ptr);
 		}
 	}
 
-	void on_active_connector(xconnector_ptr peer_ptr)
+	void on_active_connector(tcp_clt_ptr peer_ptr)
 	{
 		BOOST_ASSERT(!peer_ptr->context().empty());
-		xconnector_entry_weak_ptr entry_weak_ptr(boost::any_cast<xconnector_entry_weak_ptr>(peer_ptr->context()));
-		xconnector_entry_ptr entry_ptr(entry_weak_ptr.lock());
+		tcp_clt_entry_weak_ptr entry_weak_ptr(boost::any_cast<tcp_clt_entry_weak_ptr>(peer_ptr->context()));
+		tcp_clt_entry_ptr entry_ptr(entry_weak_ptr.lock());
 		if (entry_ptr)
 		{
 			connector_wheel_list_.back().insert(entry_ptr);
@@ -309,9 +309,9 @@ typedef XIdleService<Server> This;
 		if (!ec)
 		{
 #if XSERVER_PROTOTYPE_TCP
-			worker_wheel_list_.push_back(xworker_entry_bucket());
+			worker_wheel_list_.push_back(tcp_entry_bucket());
 			BOOST_ASSERT(worker_wheel_list_.size() == server_.keepalive());
-			connector_wheel_list_.push_back(xconnector_entry_bucket());
+			connector_wheel_list_.push_back(tcp_clt_entry_bucket());
 #endif //
 #if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_WEBSOCKET
 			ws_wheel_list_.push_back(ws_entry_bucket());
@@ -377,18 +377,18 @@ typedef XIdleService<Server> This;
 		std::weak_ptr<entry> entry_ptr_;
 	};
 #if XSERVER_PROTOTYPE_TCP
-	typedef x_idle_entry<xworker_t> xworker_entry;
-	typedef std::shared_ptr<xworker_entry> xworker_entry_ptr;
-	typedef std::weak_ptr<xworker_entry> xworker_entry_weak_ptr;
-	typedef boost::unordered_set<xworker_entry_ptr> xworker_entry_bucket;
-	typedef boost::circular_buffer<xworker_entry_bucket> xworker_entry_bucket_list;
-	xworker_entry_bucket_list worker_wheel_list_;
-	typedef x_idle_entry<xconnector_t> xconnector_entry;
-	typedef std::shared_ptr<xconnector_entry> xconnector_entry_ptr;
-	typedef std::weak_ptr<xconnector_entry> xconnector_entry_weak_ptr;
-	typedef boost::unordered_set<xconnector_entry_ptr> xconnector_entry_bucket;
-	typedef boost::circular_buffer<xconnector_entry_bucket> xconnector_entry_bucket_list;
-	xconnector_entry_bucket_list connector_wheel_list_;
+	typedef x_idle_entry<tcp_t> tcp_entry;
+	typedef std::shared_ptr<tcp_entry> tcp_entry_ptr;
+	typedef std::weak_ptr<tcp_entry> tcp_entry_weak_ptr;
+	typedef boost::unordered_set<tcp_entry_ptr> tcp_entry_bucket;
+	typedef boost::circular_buffer<tcp_entry_bucket> tcp_entry_bucket_list;
+	tcp_entry_bucket_list worker_wheel_list_;
+	typedef x_idle_entry<tcp_clt_t> tcp_clt_entry;
+	typedef std::shared_ptr<tcp_clt_entry> tcp_clt_entry_ptr;
+	typedef std::weak_ptr<tcp_clt_entry> tcp_clt_entry_weak_ptr;
+	typedef boost::unordered_set<tcp_clt_entry_ptr> tcp_clt_entry_bucket;
+	typedef boost::circular_buffer<tcp_clt_entry_bucket> tcp_clt_entry_bucket_list;
+	tcp_clt_entry_bucket_list connector_wheel_list_;
 #endif //
 #if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_WEBSOCKET
 	typedef x_idle_entry<ws_t> ws_entry;

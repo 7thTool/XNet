@@ -46,6 +46,8 @@
 #define XSERVER_VERSION_MINOR 1
 #define XSERVER_VERSION "1.1.1"
 
+//#define XSERVER_THREAD_POOL 1
+
 /*#ifdef _WIN32 
 //定义_WIN32_WINNT 0x0501时，需要使用兼容XP设置
 //#define _WIN32_WINNT 0x0501 

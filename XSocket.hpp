@@ -146,22 +146,22 @@ class tcp_session
 ///
 
 template <class Server>
-class XWorker
-	: public XPeer<Server, XWorker<Server>>
-	, public tcp_session<XWorker<Server>>
-	, public std::enable_shared_from_this<XWorker<Server>>
+class tcp_peer_session
+	: public XPeer<Server, tcp_peer_session<Server>>
+	, public tcp_session<tcp_peer_session<Server>>
+	, public std::enable_shared_from_this<tcp_peer_session<Server>>
 	, private boost::noncopyable
 {
-	typedef XWorker<Server> This;
-	typedef XPeer<Server, XWorker<Server>> Base;
-	typedef tcp_session<XWorker<Server>> Handler;
+	typedef tcp_peer_session<Server> This;
+	typedef XPeer<Server, tcp_peer_session<Server>> Base;
+	typedef tcp_session<tcp_peer_session<Server>> Handler;
   public:
-	XWorker(Server &srv, size_t id, boost::asio::ip::tcp::socket sock)
+	tcp_peer_session(Server &srv, size_t id, boost::asio::ip::tcp::socket sock)
 		: Base(srv, MAKE_PEER_ID(PEER_TYPE_TCP, id)), Handler(), sock_(std::move(sock))
 	{
 	}
 
-	~XWorker()
+	~tcp_peer_session()
 	{
 		server().on_io_close(this);
 	}
@@ -181,22 +181,22 @@ class XWorker
 };
 
 template <class Server>
-class XConnector
-	: public XClientPeer<Server,XConnector<Server>>
-	, public tcp_session<XWorker<Server>>
-	, public std::enable_shared_from_this<XConnector<Server>>
+class tcp_client_session
+	: public XClientPeer<Server,tcp_client_session<Server>>
+	, public tcp_session<tcp_peer_session<Server>>
+	, public std::enable_shared_from_this<tcp_client_session<Server>>
 	, private boost::noncopyable
 {
-	typedef XConnector<Server> This;
-	typedef XClientPeer<Server,XConnector<Server>> Base;
-	typedef tcp_session<XWorker<Server>> Handler;
+	typedef tcp_client_session<Server> This;
+	typedef XClientPeer<Server,tcp_client_session<Server>> Base;
+	typedef tcp_session<tcp_peer_session<Server>> Handler;
   public:
-	XConnector(Server &srv, size_t id, boost::asio::ip::tcp::socket& sock)
+	tcp_client_session(Server &srv, size_t id, boost::asio::ip::tcp::socket& sock)
 		: Base(srv, MAKE_PEER_ID(PEER_TYPE_TCP_CLIENT, id)), Handler(), sock_(std::move(sock))
 	{
 	}
 
-	~XConnector()
+	~tcp_client_session()
 	{
 		server().on_io_close(this);
 	}

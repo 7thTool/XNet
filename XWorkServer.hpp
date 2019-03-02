@@ -14,12 +14,12 @@ template <class T>
 class XWorkServerT : private boost::noncopyable
 {
 #if XSERVER_PROTOTYPE_TCP 
-typedef XWorker<T> xworker_t; 
-typedef XConnector<T> xconnector_t; 
-typedef std::shared_ptr<xworker_t> xworker_ptr; 
-typedef std::weak_ptr<xworker_t> xworker_weak_ptr; 
-typedef std::shared_ptr<xconnector_t> xconnector_ptr; 
-typedef std::weak_ptr<xconnector_t> xconnector_weak_ptr; 
+typedef tcp_peer_session<T> tcp_t; 
+typedef tcp_client_session<T> tcp_clt_t; 
+typedef std::shared_ptr<tcp_t> tcp_ptr; 
+typedef std::weak_ptr<tcp_t> tcp_weak_ptr; 
+typedef std::shared_ptr<tcp_clt_t> tcp_clt_ptr; 
+typedef std::weak_ptr<tcp_clt_t> tcp_clt_weak_ptr; 
 #endif 
 #if XSERVER_PROTOTYPE_HTTP 
 typedef detect_session<T> detect_t; 
@@ -278,7 +278,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 #if XSERVER_PROTOTYPE_TCP
 		case XSERVER_TCP:
 		{
-			xconnector_ptr peer_ptr = std::make_shared<xconnector_t>(*static_cast<T*>(this), peer_id, std::move(socket));
+			tcp_clt_ptr peer_ptr = std::make_shared<tcp_clt_t>(*static_cast<T*>(this), peer_id, std::move(socket));
 			peer_ptr->run(addr, tostr<x_ushort_t>(port));
 			return peer_ptr->id();
 		}
@@ -403,9 +403,9 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 #else
 			else if (PEER_TYPE(peer) == PEER_TYPE_TCP_CLIENT)
 			{
-				xconnector_ptr peer_ptr;
+				tcp_clt_ptr peer_ptr;
 				{
-					xconnector_weak_ptr peer_weak_ptr = boost::any_cast<xconnector_weak_ptr>(it->second);
+					tcp_clt_weak_ptr peer_weak_ptr = boost::any_cast<tcp_clt_weak_ptr>(it->second);
 					peer_ptr = peer_weak_ptr.lock();
 				}
 				if (peer_ptr)
@@ -415,9 +415,9 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			}
 			else if (PEER_TYPE(peer) == PEER_TYPE_TCP)
 			{
-				xworker_ptr peer_ptr;
+				tcp_ptr peer_ptr;
 				{
-					xworker_weak_ptr peer_weak_ptr = boost::any_cast<xworker_weak_ptr>(it->second);
+					tcp_weak_ptr peer_weak_ptr = boost::any_cast<tcp_weak_ptr>(it->second);
 					peer_ptr = peer_weak_ptr.lock();
 				}
 				if (peer_ptr)
@@ -526,9 +526,9 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 #if XSERVER_PROTOTYPE_TCP
 			case PEER_TYPE_TCP_CLIENT:
 			{
-				xconnector_ptr peer_ptr;
+				tcp_clt_ptr peer_ptr;
 				{
-					xconnector_weak_ptr peer_weak_ptr = boost::any_cast<xconnector_weak_ptr>(it->second);
+					tcp_clt_weak_ptr peer_weak_ptr = boost::any_cast<tcp_clt_weak_ptr>(it->second);
 					peer_ptr = peer_weak_ptr.lock();
 				}
 				if (peer_ptr)
@@ -543,9 +543,9 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			break;
 			case PEER_TYPE_TCP:
 			{
-				xworker_ptr peer_ptr;
+				tcp_ptr peer_ptr;
 				{
-					xworker_weak_ptr peer_weak_ptr = boost::any_cast<xworker_weak_ptr>(it->second);
+					tcp_weak_ptr peer_weak_ptr = boost::any_cast<tcp_weak_ptr>(it->second);
 					peer_ptr = peer_weak_ptr.lock();
 				}
 				if (peer_ptr)
@@ -570,21 +570,21 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	//void broadcast(const char* buf, const size_t len);
 
 #if XSERVER_PROTOTYPE_TCP
-	//int parse_buffer(xworker_ptr peer_ptr, const char* buf, const size_t len);
-	//int parse_buffer(xconnector_ptr peer_ptr, const char* buf, const size_t len);
+	//int parse_buffer(tcp_ptr peer_ptr, const char* buf, const size_t len);
+	//int parse_buffer(tcp_clt_ptr peer_ptr, const char* buf, const size_t len);
 
-	void on_io_accept(xworker_ptr peer_ptr)
+	void on_io_accept(tcp_ptr peer_ptr)
 	{
 		{
 			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
-			peer_map_[peer_ptr->id()] = xworker_weak_ptr(peer_ptr);
+			peer_map_[peer_ptr->id()] = tcp_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
 		if(idle_service_)
 			idle_service_->add(peer_ptr);
 	}
 
-	void on_io_connect(xconnector_ptr peer_ptr)
+	void on_io_connect(tcp_clt_ptr peer_ptr)
 	{
 		// 	if (err && err[0]) {
 		// 		handler_->handle_io_connect(peer_ptr->id(), XSERVER_TCP, err);
@@ -592,7 +592,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		// 	else {
 		{
 			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
-			peer_map_[peer_ptr->id()] = xconnector_weak_ptr(peer_ptr);
+			peer_map_[peer_ptr->id()] = tcp_clt_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
 		if(idle_service_)
@@ -600,7 +600,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		//	}
 	}
 
-	void on_io_read(xworker_ptr peer_ptr, XBuffer &buffer)
+	void on_io_read(tcp_ptr peer_ptr, XBuffer &buffer)
 	{
 		if(idle_service_)
 			idle_service_->active(peer_ptr);
@@ -608,12 +608,12 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		peer_ptr->do_read();
 	}
 
-	void on_io_write(xworker_ptr peer_ptr, XBuffer &buffer)
+	void on_io_write(tcp_ptr peer_ptr, XBuffer &buffer)
 	{
 		
 	}
 
-	void on_io_close(xworker_t *peer_ptr)
+	void on_io_close(tcp_t *peer_ptr)
 	{
 		bool bfind = false;
 		{
@@ -628,11 +628,11 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		LOG4I("tcp_peer_session(%d) HAS BEEN CLOSED", peer_ptr->id());
 		//}
 	}
 
-	void on_io_read(xconnector_ptr peer_ptr, XBuffer &buffer)
+	void on_io_read(tcp_clt_ptr peer_ptr, XBuffer &buffer)
 	{
 		if(idle_service_)
 			idle_service_->active(peer_ptr);
@@ -640,12 +640,12 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		peer_ptr->do_read();
 	}
 
-	void on_io_write(xconnector_ptr peer_ptr, XBuffer &buffer)
+	void on_io_write(tcp_clt_ptr peer_ptr, XBuffer &buffer)
 	{
 		
 	}
 
-	void on_io_close(xconnector_t *peer_ptr)
+	void on_io_close(tcp_clt_t *peer_ptr)
 	{
 		bool bfind = false;
 		{
@@ -660,7 +660,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("XConnector(%d) HAS BEEN CLOSED", peer_ptr->id());
+		LOG4I("tcp_client_session(%d) HAS BEEN CLOSED", peer_ptr->id());
 		//}
 	}
 #endif //
@@ -816,7 +816,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		LOG4I("tcp_peer_session(%d) HAS BEEN CLOSED", peer_ptr->id());
 		//}
 	}
 
@@ -835,7 +835,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		LOG4I("tcp_peer_session(%d) HAS BEEN CLOSED", peer_ptr->id());
 		//}
 	}
 
@@ -879,7 +879,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		LOG4I("tcp_peer_session(%d) HAS BEEN CLOSED", peer_ptr->id());
 		//}
 	}
 
@@ -915,7 +915,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		LOG4I("tcp_peer_session(%d) HAS BEEN CLOSED", peer_ptr->id());
 		//}
 	}
 
@@ -954,7 +954,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		LOG4I("tcp_peer_session(%d) HAS BEEN CLOSED", peer_ptr->id());
 		//}
 	}
 
@@ -990,7 +990,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("XWorker(%d) HAS BEEN CLOSED", peer_ptr->id());
+		LOG4I("tcp_peer_session(%d) HAS BEEN CLOSED", peer_ptr->id());
 		//}
 	}
 
@@ -1079,7 +1079,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 #if XSERVER_PROTOTYPE_TCP
 			case XSERVER_TCP:
 			{
-				xworker_ptr peer_ptr = std::make_shared<xworker_t>(*static_cast<T*>(this), peer_id, std::move(*socket));
+				tcp_ptr peer_ptr = std::make_shared<tcp_t>(*static_cast<T*>(this), peer_id, std::move(*socket));
 				on_io_accept(peer_ptr);
 				peer_ptr->run();
 			}

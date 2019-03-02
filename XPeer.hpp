@@ -214,12 +214,12 @@ public:
 		//	, boost::asio::placeholders::error));
 		// Make the connection on the IP address we get from a lookup
 		boost::asio::async_connect(
-			sock_,
+			derived().sock(),
 			results.begin(),
 			results.end(),
 			std::bind(
-				&This::on_connect,
-				shared_from_this(),
+				&Derived::on_connect,
+				derived().shared_from_this(),
 				std::placeholders::_1));
 	}
 
@@ -228,14 +228,14 @@ public:
 		if (!ec)
 		{
 			server().on_io_connect(shared_from_this());
-			sock_.set_option(boost::asio::ip::tcp::no_delay(true));
-			do_read();
+			derived().sock().set_option(boost::asio::ip::tcp::no_delay(true));
+			derived().do_read();
 		}
 		else
 		{
-			//boost::asio::ip::tcp::endpoint ep = get_remote_endpoint();
-			//std::string str = ep.address().to_string();
-			//LOG4E("XPEER(%d) %s:%d CONNECT ERROR: %d", id(), str.c_str(), ep.port(), ec.value());
+			boost::asio::ip::tcp::endpoint ep = get_remote_endpoint();
+			std::string str = ep.address().to_string();
+			LOG4E("XPEER(%d) %s:%d CONNECT ERROR: %d", id(), str.c_str(), ep.port(), ec.value());
 			derived().do_reconnect();
 		}
 	}
