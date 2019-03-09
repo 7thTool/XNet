@@ -205,7 +205,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		LOG4I("XSERVER connecting addr=%s port=%d type=%s", addr.c_str(), port, typeid(Ty).name());
 
 		size_t peer_id = 0;
-		if (io_channel != (x_size_t)-1)
+		if (io_channel != (size_t)-1)
 		{
 			peer_id = new_io_channel_peer_id(io_channel);
 		}
@@ -218,7 +218,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		if (timeout) {
 			peer_ptr->set_connect_timeout(timeout);
 		}
-		peer_ptr->run(addr, tostr<unsigned short>(port));
+		peer_ptr->run(addr, XUtil::tostr<unsigned short>(port));
 		return peer_ptr;
 	}
 
@@ -916,7 +916,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		return 1 + id % (io_thread_num_ - 1);
 	}
 
-	void post_accept(const std::shared_ptr<boost::asio::ip::tcp::acceptor> &acceptor, const int_t type)
+	void post_accept(const std::shared_ptr<boost::asio::ip::tcp::acceptor> &acceptor, const ssize_t type)
 	{
 		if (!is_run())
 		{
@@ -931,7 +931,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		acceptor->async_accept(*socket, boost::bind(&T::on_accept, static_cast<T*>(this), boost::asio::placeholders::error, acceptor, type, socket, peer_id));
 	}
 
-	void on_accept(const boost::system::error_code &ec, const std::shared_ptr<boost::asio::ip::tcp::acceptor> &acceptor, const int_t type, const std::shared_ptr<boost::asio::ip::tcp::socket> &socket, const size_t peer_id)
+	void on_accept(const boost::system::error_code &ec, const std::shared_ptr<boost::asio::ip::tcp::acceptor> &acceptor, const ssize_t type, const std::shared_ptr<boost::asio::ip::tcp::socket> &socket, const size_t peer_id)
 	{
 		if (ec)
 		{

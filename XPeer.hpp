@@ -184,7 +184,7 @@ public:
 	void reconnect()
 	{
 		reconnect_ = false;
-		derived().run(addr(), port());
+		derived().run(derived().addr(), derived().port());
 	}
 
 	void do_close() {
@@ -208,7 +208,7 @@ public:
 
 	void do_connect(const boost::asio::ip::tcp::resolver::results_type &results)
 	{
-		LOG4I("XPEER(%d) %s:%s  CONNECTING", id(), addr().c_str(), port().c_str());
+		LOG4I("XPEER(%d) %s:%s  CONNECTING", derived().id(), derived().addr().c_str(), derived().port().c_str());
 		//sock_.async_connect(ep, boost::bind(&XConnector::on_connect
 		//	, shared_from_this()
 		//	, boost::asio::placeholders::error));
@@ -227,15 +227,15 @@ public:
 	{
 		if (!ec)
 		{
-			server().on_io_connect(shared_from_this());
+			derived().server().on_io_connect(derived().shared_from_this());
 			derived().sock().set_option(boost::asio::ip::tcp::no_delay(true));
 			derived().do_read();
 		}
 		else
 		{
-			boost::asio::ip::tcp::endpoint ep = get_remote_endpoint();
+			boost::asio::ip::tcp::endpoint ep = derived().get_remote_endpoint();
 			std::string str = ep.address().to_string();
-			LOG4E("XPEER(%d) %s:%d CONNECT ERROR: %d", id(), str.c_str(), ep.port(), ec.value());
+			LOG4E("XPEER(%d) %s:%d CONNECT ERROR: %d", derived().id(), str.c_str(), ep.port(), ec.value());
 			derived().do_reconnect();
 		}
 	}
@@ -250,7 +250,7 @@ public:
 		reconnect_ = false;
 
 		timer_.expires_after(std::chrono::milliseconds(timeout_));
-		on_reconnect_timer({});
+		derived().on_reconnect_timer({});
 	}
 
 	// Called when the timer expires.

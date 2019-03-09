@@ -16,6 +16,42 @@ class XServerT : public XServiceT<T>
 {
 	typedef XServiceT<T> base;
 public:
+#if XSERVER_PROTOTYPE_TCP 
+typedef tcp_peer_session<T> tcp_t; 
+typedef tcp_client_session<T> tcp_clt_t; 
+typedef std::shared_ptr<tcp_t> tcp_ptr; 
+typedef std::weak_ptr<tcp_t> tcp_weak_ptr; 
+typedef std::shared_ptr<tcp_clt_t> tcp_clt_ptr; 
+typedef std::weak_ptr<tcp_clt_t> tcp_clt_weak_ptr; 
+#endif 
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_HTTPS
+typedef plain_http_session<T> http_t; 
+typedef std::shared_ptr<http_t> http_ptr; 
+typedef std::weak_ptr<http_t> http_weak_ptr; 
+#endif 
+#if XSERVER_PROTOTYPE_HTTPS
+typedef detect_session<T> detect_t; 
+typedef std::shared_ptr<detect_t> detect_ptr; 
+typedef ssl_http_session<T> https_t; 
+typedef std::shared_ptr<https_t> https_ptr; 
+typedef std::weak_ptr<https_t> https_weak_ptr; 
+#endif 
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE==XSERVER_WEBSOCKET 
+typedef plain_websocket_session<T> ws_t; 
+typedef plain_websocket_client_session<T> ws_clt_t; 
+typedef std::shared_ptr<ws_t> ws_ptr; 
+typedef std::weak_ptr<ws_t> ws_weak_ptr; 
+typedef std::shared_ptr<ws_clt_t> ws_clt_ptr; 
+typedef std::weak_ptr<ws_clt_t> ws_clt_weak_ptr; 
+#endif 
+#if XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE==XSERVER_SSL_WEBSOCKET 
+typedef ssl_websocket_session<T> wss_t; 
+typedef ssl_websocket_client_session<T> wss_clt_t; 
+typedef std::shared_ptr<wss_t> wss_ptr; 
+typedef std::weak_ptr<wss_t> wss_weak_ptr; 
+typedef std::shared_ptr<wss_clt_t> wss_clt_ptr; 
+typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr; 
+#endif
 	class Listener
 	{
 	public:

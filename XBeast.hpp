@@ -407,6 +407,7 @@ class plain_websocket_session
 	, public websocket_session<plain_websocket_session<Server>>
 	, public std::enable_shared_from_this<plain_websocket_session<Server>>
 {
+	typedef plain_websocket_session<Server> This;
 	typedef XPeer<Server, plain_websocket_session<Server>> Base;
 	typedef websocket_session<plain_websocket_session<Server>> Handler;
 	boost::beast::websocket::stream<boost::asio::ip::tcp::socket> ws_;
@@ -423,7 +424,7 @@ class plain_websocket_session
 
 	~plain_websocket_session()
 	{
-		server().on_io_close(this);
+		this->server().on_io_close(this);
 	}
 
 	// Called by the base class
@@ -442,7 +443,7 @@ class plain_websocket_session
 		//on_timer({});
 
 		// Accept the WebSocket upgrade request
-		do_accept(std::move(req));
+		this->do_accept(std::move(req));
 	}
 	inline void
 	run()
@@ -452,7 +453,7 @@ class plain_websocket_session
 		//on_timer({});
 
 		// Accept the WebSocket request
-		do_accept();
+		this->do_accept();
 	}
 
 	void
@@ -469,10 +470,10 @@ class plain_websocket_session
 		ws().async_close(
 			boost::beast::websocket::close_code::normal,
 			boost::asio::bind_executor(
-				strand_,
+				this->strand_,
 				std::bind(
-					&plain_websocket_session::on_close,
-					shared_from_this(),
+					&This::on_close,
+					this->shared_from_this(),
 					std::placeholders::_1)));
 	}
 
@@ -491,10 +492,10 @@ class plain_websocket_session
 		ws().async_close(
 			boost::beast::websocket::close_code::normal,
 			boost::asio::bind_executor(
-				strand_,
+				this->strand_,
 				std::bind(
-					&plain_websocket_session::on_close,
-					shared_from_this(),
+					&This::on_close,
+					this->shared_from_this(),
 					std::placeholders::_1)));
 	}
 
@@ -506,7 +507,7 @@ class plain_websocket_session
 			return;
 
 		if (ec)
-			return on_fail(ec, "close");
+			return this->on_fail(ec, "close");
 
 		// At this point the connection is gracefully closed
 	}
@@ -523,6 +524,7 @@ class ssl_websocket_session
 	, public websocket_session<ssl_websocket_session<Server>>
 	, public std::enable_shared_from_this<ssl_websocket_session<Server>>
 {
+	typedef ssl_websocket_session<Server> This;
 	typedef XPeer<Server, ssl_websocket_session<Server>> Base;
 	typedef websocket_session<ssl_websocket_session<Server>> Handler;
 	boost::beast::websocket::stream<ssl_stream<boost::asio::ip::tcp::socket>> ws_;
@@ -546,7 +548,7 @@ class ssl_websocket_session
 
 	~ssl_websocket_session()
 	{
-		server().on_io_close(this);
+		this->server().on_io_close(this);
 	}
 
 	// Called by the base class
@@ -565,7 +567,7 @@ class ssl_websocket_session
 		//boost::system::error_code ec;
 		//timer_.cancel(ec);
 
-		do_eof();
+		this->do_eof();
 	}
 
 	// Start the asynchronous operation
@@ -578,7 +580,7 @@ class ssl_websocket_session
 		//on_timer({});
 
 		// Accept the WebSocket upgrade request
-		do_accept(std::move(req));
+		this->do_accept(std::move(req));
 	}
 	inline void
 	run()
@@ -589,8 +591,8 @@ class ssl_websocket_session
 			boost::asio::bind_executor(
 				strand_,
 				std::bind(
-					&ssl_websocket_session::on_handshake,
-					shared_from_this(),
+					&This::on_handshake,
+					this->shared_from_this(),
 					std::placeholders::_1)));
 	}
 
@@ -605,7 +607,7 @@ class ssl_websocket_session
 		//on_timer({});
 
 		// Accept the WebSocket request
-		do_accept();
+		this->do_accept();
 	}
 
 	inline void
@@ -621,8 +623,8 @@ class ssl_websocket_session
 			boost::asio::bind_executor(
 				strand_,
 				std::bind(
-					&ssl_websocket_session::on_shutdown,
-					shared_from_this(),
+					&This::on_shutdown,
+					this->shared_from_this(),
 					std::placeholders::_1)));
 	}
 
@@ -650,7 +652,7 @@ class ssl_websocket_session
 		//timer_.expires_at(
 		//	(std::chrono::steady_clock::time_point::max)());
 		//on_timer({});
-		do_eof();
+		this->do_eof();
 	}
 };
 
@@ -932,6 +934,7 @@ class plain_http_session
 	, public http_session<plain_http_session<Server>>
 	, public std::enable_shared_from_this<plain_http_session<Server>>
 {
+	typedef plain_http_session<Server> This;
 	typedef XPeer<Server, plain_http_session<Server>> Base;
 	typedef http_session<plain_http_session<Server>> Handler;
 	boost::asio::ip::tcp::socket socket_;
@@ -959,7 +962,7 @@ class plain_http_session
 
 	~plain_http_session()
 	{
-		server().on_io_close(this);
+		this->server().on_io_close(this);
 	}
 
 
@@ -977,14 +980,14 @@ class plain_http_session
 	{
 		// Run the timer. The timer is operated
 		// continuously, this simplifies the code.
-		on_timer({});
+		this->on_timer({});
 
-		do_read();
+		this->do_read();
 	}
 
 	void do_close()
 	{
-		return do_timeout();
+		return this->do_timeout();
 	}
 
 	inline void
@@ -1020,6 +1023,7 @@ class ssl_http_session
 	, public http_session<ssl_http_session<Server>>
 	, public std::enable_shared_from_this<ssl_http_session<Server>>
 {
+	typedef ssl_http_session<Server> This;
 	typedef XPeer<Server,ssl_http_session<Server>> Base;
 	typedef http_session<ssl_http_session<Server>> Handler;
 	ssl_stream<boost::asio::ip::tcp::socket> stream_;
@@ -1050,7 +1054,7 @@ class ssl_http_session
 
 	~ssl_http_session()
 	{
-		server().on_io_close(this);
+		this->server().on_io_close(this);
 	}
 
 	// Called by the base class
@@ -1063,7 +1067,7 @@ class ssl_http_session
 
 	void do_close()
 	{
-		return do_timeout();
+		return this->do_timeout();
 	}
 
 	// Start the asynchronous operation
@@ -1072,7 +1076,7 @@ class ssl_http_session
 	{
 		// Run the timer. The timer is operated
 		// continuously, this simplifies the code.
-		on_timer({});
+		this->on_timer({});
 
 		// Set the timer
 		timer_.expires_after(std::chrono::seconds(15));
@@ -1085,8 +1089,8 @@ class ssl_http_session
 			boost::asio::bind_executor(
 				strand_,
 				std::bind(
-					&ssl_http_session::on_handshake,
-					shared_from_this(),
+					&This::on_handshake,
+					this->shared_from_this(),
 					std::placeholders::_1,
 					std::placeholders::_2)));
 	}
@@ -1105,7 +1109,7 @@ class ssl_http_session
 		// Consume the portion of the buffer used by the handshake
 		buffer_.consume(bytes_used);
 
-		do_read();
+		this->do_read();
 	}
 
 	inline void
@@ -1121,8 +1125,8 @@ class ssl_http_session
 			boost::asio::bind_executor(
 				strand_,
 				std::bind(
-					&ssl_http_session::on_shutdown,
-					shared_from_this(),
+					&This::on_shutdown,
+					this->shared_from_this(),
 					std::placeholders::_1)));
 	}
 
@@ -1134,7 +1138,7 @@ class ssl_http_session
 			return;
 
 		if (ec)
-			return on_fail(ec, "shutdown");
+			return this->on_fail(ec, "shutdown");
 
 		// At this point the connection is closed gracefully
 	}
@@ -1149,8 +1153,8 @@ class ssl_http_session
 		// Start the timer again
 		timer_.expires_at(
 			(std::chrono::steady_clock::time_point::max)());
-		on_timer({});
-		do_eof();
+		this->on_timer({});
+		this->do_eof();
 	}
 };
 
@@ -1166,6 +1170,7 @@ class detect_session
 	: public XPeer<Server,detect_session<Server>>
 	, public std::enable_shared_from_this<detect_session<Server>>
 {
+	typedef detect_session<Server> This;
 	typedef XPeer<Server,detect_session<Server>> Base;
 	boost::asio::ip::tcp::socket socket_;
 	boost::asio::ssl::context &ctx_;
@@ -1196,8 +1201,8 @@ class detect_session
 			boost::asio::bind_executor(
 				strand_,
 				std::bind(
-					&detect_session::on_detect,
-					shared_from_this(),
+					&This::on_detect,
+					this->shared_from_this(),
 					std::placeholders::_1,
 					std::placeholders::_2)));
 	}
@@ -1487,6 +1492,7 @@ class plain_websocket_client_session
 	, public websocket_client_session<plain_websocket_client_session<Server>>
 	, public std::enable_shared_from_this<plain_websocket_client_session<Server>>
 {
+	typedef plain_websocket_client_session<Server> This;
 	typedef XClientPeer<Server,plain_websocket_client_session<Server>> Base;
 	typedef websocket_client_session<plain_websocket_client_session<Server>> Handler;
 	boost::beast::websocket::stream<boost::asio::ip::tcp::socket> ws_;
@@ -1504,7 +1510,7 @@ class plain_websocket_client_session
 
 	~plain_websocket_client_session()
 	{
-		server().on_io_close(this);
+		this->server().on_io_close(this);
 	}
 
 	// Called by the base class
@@ -1520,15 +1526,15 @@ class plain_websocket_client_session
 	inline void
 	do_connect(boost::asio::ip::tcp::resolver::results_type results)
 	{
-		LOG4I("XPEER(%d) %s:%s  CONNECTING", id(), addr().c_str(), port().c_str());
+		LOG4I("XPEER(%d) %s:%s  CONNECTING", this->id(), this->addr().c_str(), this->port().c_str());
 		// Make the connection on the IP address we get from a lookup
 		boost::asio::async_connect(
 			sock(),
 			results.begin(),
 			results.end(),
 			std::bind(
-				&on_connect,
-				shared_from_this(),
+				&This::on_connect,
+				this->shared_from_this(),
 				std::placeholders::_1));
 	}
 
@@ -1536,12 +1542,12 @@ class plain_websocket_client_session
 	on_connect(const boost::system::error_code &ec)
 	{
 		if (ec) {
-			on_fail(ec, "connect");
-			do_reconnect();
+			this->on_fail(ec, "connect");
+			this->do_reconnect();
 			return;
 		}
 
-		do_handshake();
+		this->do_handshake();
 	}
 };
 
@@ -1556,6 +1562,7 @@ class ssl_websocket_client_session
 	, public websocket_client_session<ssl_websocket_client_session<Server>>
 	, public std::enable_shared_from_this<ssl_websocket_client_session<Server>>
 {
+	typedef ssl_websocket_client_session<Server> This;
 	typedef XClientPeer<Server, ssl_websocket_client_session<Server>> Base;
 	typedef websocket_client_session<ssl_websocket_client_session<Server>> Handler;
 	boost::beast::websocket::stream<ssl_stream<boost::asio::ip::tcp::socket>> ws_;
@@ -1571,7 +1578,7 @@ class ssl_websocket_client_session
 
 	~ssl_websocket_client_session()
 	{
-		server().on_io_close(this);
+		this->server().on_io_close(this);
 	}
 
 	// Called by the base class
@@ -1595,8 +1602,8 @@ class ssl_websocket_client_session
 			results.begin(),
 			results.end(),
 			std::bind(
-				&on_connect,
-				shared_from_this(),
+				&This::on_connect,
+				this->shared_from_this(),
 				std::placeholders::_1));
 	}
 
@@ -1604,7 +1611,7 @@ class ssl_websocket_client_session
 	on_connect(boost::system::error_code ec)
 	{
 		if (ec) {
-			on_fail(ec, "connect");
+			this->on_fail(ec, "connect");
 			do_reconnect();
 			return;
 		}
@@ -1619,8 +1626,8 @@ class ssl_websocket_client_session
 		ssl().async_handshake(
 			boost::asio::ssl::stream_base::client,
 			std::bind(
-				&on_ssl_handshake,
-				shared_from_this(),
+				&This::on_ssl_handshake,
+				this->shared_from_this(),
 				std::placeholders::_1));
 	}
 
@@ -1628,7 +1635,7 @@ class ssl_websocket_client_session
 	on_ssl_handshake(boost::system::error_code ec)
 	{
 		if (ec) {
-			on_fail(ec, "ssl_handshake");
+			this->on_fail(ec, "ssl_handshake");
 			do_reconnect();
 			return;
 		}

@@ -37,7 +37,7 @@ class tcp_session
 
 	inline void close()
 	{
-		derived().server().post_io_callback(id(),
+		derived().server().post_io_callback(derived().id(),
 					   boost::bind(&Derived::do_close,
 								   derived().shared_from_this()));
 	}
@@ -163,17 +163,17 @@ class tcp_peer_session
 
 	~tcp_peer_session()
 	{
-		server().on_io_close(this);
+		this->server().on_io_close(this);
 	}
 
 	inline boost::asio::ip::tcp::socket &sock() { return sock_; }
 
 	inline void run()
 	{
-		boost::asio::ip::tcp::endpoint ep = get_remote_endpoint();
+		boost::asio::ip::tcp::endpoint ep = this->get_remote_endpoint();
 		std::string str = ep.address().to_string();
-		LOG4I("XPEER(%d) %s:%d  CONNECTED", id(), str.c_str(), ep.port());
-		do_read();
+		LOG4I("XPEER(%d) %s:%d  CONNECTED", this->id(), str.c_str(), ep.port());
+		this->do_read();
 	}
 
   protected:
@@ -198,7 +198,7 @@ class tcp_client_session
 
 	~tcp_client_session()
 	{
-		server().on_io_close(this);
+		this->server().on_io_close(this);
 	}
 
 	inline boost::asio::ip::tcp::socket &sock() { return sock_; }
