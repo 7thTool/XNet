@@ -702,99 +702,99 @@ class http_session
 	// the Curiously Recurring Template Pattern idiom.
 	inline Derived & derived() { return static_cast<Derived &>(*this); }
 
-	// This queue is used for HTTP pipelining.
-	class queue
-	{
-		enum
-		{
-			// Maximum number of responses we will queue
-			limit = 8
-		};
+	// // This queue is used for HTTP pipelining.
+	// class queue
+	// {
+	// 	enum
+	// 	{
+	// 		// Maximum number of responses we will queue
+	// 		limit = 8
+	// 	};
 
-		// The type-erased, saved work item
-		struct work
-		{
-			virtual ~work() = default;
-			virtual void operator()() = 0;
-		};
+	// 	// The type-erased, saved work item
+	// 	struct work
+	// 	{
+	// 		virtual ~work() = default;
+	// 		virtual void operator()() = 0;
+	// 	};
 
-		http_session &self_;
-		std::vector<std::unique_ptr<work>> items_;
+	// 	http_session &self_;
+	// 	std::vector<std::unique_ptr<work>> items_;
 
-	  public:
-		explicit queue(http_session &self)
-			: self_(self)
-		{
-			static_assert(limit > 0, "queue limit must be positive");
-			items_.reserve(limit);
-		}
+	//   public:
+	// 	explicit queue(http_session &self)
+	// 		: self_(self)
+	// 	{
+	// 		static_assert(limit > 0, "queue limit must be positive");
+	// 		items_.reserve(limit);
+	// 	}
 
-		// Returns `true` if we have reached the queue limit
-		inline bool
-		is_full() const
-		{
-			return items_.size() >= limit;
-		}
+	// 	// Returns `true` if we have reached the queue limit
+	// 	inline bool
+	// 	is_full() const
+	// 	{
+	// 		return items_.size() >= limit;
+	// 	}
 
-		// Called when a message finishes sending
-		// Returns `true` if the caller should initiate a read
-		bool
-		on_write()
-		{
-			BOOST_ASSERT(!items_.empty());
-			auto const was_full = is_full();
-			items_.erase(items_.begin());
-			if (!items_.empty())
-				(*items_.front())();
-			return was_full;
-		}
+	// 	// Called when a message finishes sending
+	// 	// Returns `true` if the caller should initiate a read
+	// 	bool
+	// 	on_write()
+	// 	{
+	// 		BOOST_ASSERT(!items_.empty());
+	// 		auto const was_full = is_full();
+	// 		items_.erase(items_.begin());
+	// 		if (!items_.empty())
+	// 			(*items_.front())();
+	// 		return was_full;
+	// 	}
 
-		// Called by the HTTP handler to send a response.
-		template <bool isRequest, class Body, class Fields>
-		void
-		operator()(boost::beast::http::message<isRequest, Body, Fields> &&msg)
-		{
-			// This holds a work item
-			struct work_impl : work
-			{
-				http_session &self_;
-				boost::beast::http::message<isRequest, Body, Fields> msg_;
+	// 	// Called by the HTTP handler to send a response.
+	// 	template <bool isRequest, class Body, class Fields>
+	// 	void
+	// 	operator()(boost::beast::http::message<isRequest, Body, Fields> &&msg)
+	// 	{
+	// 		// This holds a work item
+	// 		struct work_impl : work
+	// 		{
+	// 			http_session &self_;
+	// 			boost::beast::http::message<isRequest, Body, Fields> msg_;
 
-				work_impl(
-					http_session &self,
-					boost::beast::http::message<isRequest, Body, Fields> &&msg)
-					: self_(self), msg_(std::move(msg))
-				{
-				}
+	// 			work_impl(
+	// 				http_session &self,
+	// 				boost::beast::http::message<isRequest, Body, Fields> &&msg)
+	// 				: self_(self), msg_(std::move(msg))
+	// 			{
+	// 			}
 
-				void
-				operator()()
-				{
-					boost::beast::http::async_write(
-						self_.derived().stream(),
-						msg_,
-						boost::asio::bind_executor(
-							self_.strand_,
-							std::bind(
-								&Derived::on_write,
-								self_.derived().shared_from_this(),
-								std::placeholders::_1,
-								msg_.need_eof())));
-				}
-			};
+	// 			void
+	// 			operator()()
+	// 			{
+	// 				boost::beast::http::async_write(
+	// 					self_.derived().stream(),
+	// 					msg_,
+	// 					boost::asio::bind_executor(
+	// 						self_.strand_,
+	// 						std::bind(
+	// 							&Derived::on_write,
+	// 							self_.derived().shared_from_this(),
+	// 							std::placeholders::_1,
+	// 							msg_.need_eof())));
+	// 			}
+	// 		};
 
-			// Allocate and store the work
-			items_.emplace_back(new work_impl(self_, std::move(msg)));
+	// 		// Allocate and store the work
+	// 		items_.emplace_back(new work_impl(self_, std::move(msg)));
 
-			// If there was no previous work, start this one
-			if (items_.size() == 1)
-				(*items_.front())();
-		}
-	};
+	// 		// If there was no previous work, start this one
+	// 		if (items_.size() == 1)
+	// 			(*items_.front())();
+	// 	}
+	// };
 
 	std::string const &doc_root_;
 	boost::beast::http::request<boost::beast::http::string_body> req_; //当前收到的请求包
-	queue queue_;													   //发送队列
+	//queue queue_;													   //发送队列
 
   protected:
 	boost::asio::steady_timer timer_;
@@ -804,13 +804,15 @@ class http_session
   public:
 	// Construct the session
 	http_session(boost::asio::io_context &ioc, std::string const &doc_root)
-		: doc_root_(doc_root), queue_(*this)
+		: doc_root_(doc_root)
+		//, queue_(*this)
 		, timer_(ioc,(std::chrono::steady_clock::time_point::max)())
 		, strand_(ioc.get_executor()), buffer_()
 	{
 	}
 	http_session(boost::asio::io_context &ioc, boost::beast::flat_buffer buffer, std::string const &doc_root)
-		: doc_root_(doc_root), queue_(*this)
+		: doc_root_(doc_root)
+		//, queue_(*this)
 		, timer_(ioc,(std::chrono::steady_clock::time_point::max)())
 		, strand_(ioc.get_executor()), buffer_(std::move(buffer))
 	{
@@ -821,6 +823,22 @@ class http_session
 		derived().server().post_io_callback(derived().id(),
 					   boost::bind(&Derived::do_close,
 								   derived().shared_from_this()));
+	}
+
+	// Called by the HTTP handler to send a response.
+	template <bool isRequest, class Body, class Fields>
+	inline void do_write(boost::beast::http::message<isRequest, Body, Fields> &&msg)
+	{
+		boost::beast::http::async_write(
+					derived().stream(),
+					msg,
+					boost::asio::bind_executor(
+						strand_,
+						std::bind(
+							&Derived::on_write,
+							derived().shared_from_this(),
+							std::placeholders::_1,
+							msg.need_eof())));
 	}
 
 	inline void
@@ -889,11 +907,11 @@ class http_session
 											 std::move(req_));
 		}
 
-		derived().server().on_io_read(derived().shared_from_this(), doc_root_, std::move(req_), queue_);
+		derived().server().on_io_read(derived().shared_from_this(), doc_root_, std::move(req_));
 
-		// If we aren't at the queue limit, try to pipeline another request
-		if (!queue_.is_full())
-			derived().do_read();
+		// // If we aren't at the queue limit, try to pipeline another request
+		// if (!queue_.is_full())
+		// 	derived().do_read();
 	}
 
 	void
@@ -913,12 +931,12 @@ class http_session
 			return derived().do_eof();
 		}
 
-		// Inform the queue that a write completed
-		if (queue_.on_write())
-		{
-			// Read another request
-			derived().do_read();
-		}
+		// // Inform the queue that a write completed
+		// if (queue_.on_write())
+		// {
+		// 	// Read another request
+		// 	derived().do_read();
+		// }
 	}
 };
 
@@ -938,7 +956,6 @@ class plain_http_session
 	typedef XPeer<Server, plain_http_session<Server>> Base;
 	typedef http_session<plain_http_session<Server>> Handler;
 	boost::asio::ip::tcp::socket socket_;
-	//boost::asio::strand<boost::asio::io_context::executor_type> strand_;
 
   public:
 	// Create the plain_http_session
@@ -1027,7 +1044,6 @@ class ssl_http_session
 	typedef XPeer<Server,ssl_http_session<Server>> Base;
 	typedef http_session<ssl_http_session<Server>> Handler;
 	ssl_stream<boost::asio::ip::tcp::socket> stream_;
-	//boost::asio::strand<boost::asio::io_context::executor_type> strand_;
 	bool eof_ = false;
 
   public:

@@ -671,13 +671,12 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	// request. The type of the response object depends on the
 	// contents of the request, so the interface requires the
 	// caller to pass a generic lambda for receiving the response.
-	template <class Body, class Allocator,
-			  class Send>
+	template <class Body, class Allocator>
 	void
 	on_io_read(http_ptr peer_ptr,
 			   boost::beast::string_view doc_root,
-			   boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req,
-			   Send &&send)
+			   boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req
+			   )
 	{
 		//
 	}
@@ -702,13 +701,12 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	}
 #endif
 #if XSERVER_PROTOTYPE_HTTPS
-	template <class Body, class Allocator,
-			  class Send>
+	template <class Body, class Allocator>
 	void
 	on_io_read(https_ptr peer_ptr,
 			   boost::beast::string_view doc_root,
-			   boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req,
-			   Send &&send)
+			   boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req
+			   )
 	{
 		//
 	}
