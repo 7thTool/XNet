@@ -116,7 +116,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		//std::string logfile = log_directory_ + pT->name();
 		//XLogger::instance().init(logfile);
 
-		io_service_ = std::make_shared<XIOService<T>>(*static_cast<T*>(this));
+		io_service_ = std::make_shared<XIOService<T>>(*pT);
 
 #if XSERVER_PROTOTYPE_SSL
 
@@ -197,6 +197,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		, size_t timeout
 		, const size_t io_channel = 0)
 	{
+		T* pT = static_cast<T*>(this);
 		std::shared_ptr<Ty> peer_ptr;
 		if (!is_run()) {
 			return peer_ptr;
@@ -214,7 +215,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			peer_id = new_peer_id();
 		}
 		boost::asio::ip::tcp::socket socket(io_service_->get_service(get_io_index(peer_id)));
-		peer_ptr = std::make_shared<Ty>(*static_cast<T*>(this), peer_id, std::move(socket));
+		peer_ptr = std::make_shared<Ty>(*pT, peer_id, std::move(socket));
 		if (timeout) {
 			peer_ptr->set_connect_timeout(timeout);
 		}
@@ -259,6 +260,35 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			{
 				//
 			}
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS
+			else if (PEER_TYPE(peer) == PEER_TYPE_HTTP)
+			{
+				http_ptr peer_ptr;
+				{
+					http_weak_ptr peer_weak_ptr = boost::any_cast<http_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					peer_ptr->close();
+				}
+			}
+#elif XSERVER_PROTOTYPE_HTTPS
+			else if (PEER_TYPE(peer) == PEER_TYPE_HTTPS)
+			{
+				https_ptr peer_ptr;
+				{
+					https_weak_ptr peer_weak_ptr = boost::any_cast<https_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					peer_ptr->close();
+				}
+			}
+#endif //
+
 #if XSERVER_PROTOTYPE_WEBSOCKET
 			else if (PEER_TYPE(peer) == PEER_TYPE_WEBSOCKET_CLIENT)
 			{
@@ -346,7 +376,73 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		}
 	}
 
-	bool post_packet(const size_t peer, const char *buf, const size_t len)
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS
+	template <bool isRequest, class Body, class Fields>
+	inline bool post_packet(const size_t peer, boost::beast::http::message<isRequest, Body, Fields> &&msg)
+	{
+		if (!is_run())
+		{
+			return false;
+		}
+
+		bool rlt = false;
+		boost::shared_lock<boost::shared_mutex> lock(peer_mutex_);
+		boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer);
+		if (it != peer_map_.end())
+		{
+			size_t peer_type = PEER_TYPE(peer);
+			switch (peer_type)
+			{
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS
+			case PEER_TYPE_HTTP:
+			{
+				http_ptr peer_ptr;
+				{
+					http_weak_ptr peer_weak_ptr = boost::any_cast<http_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					if (peer_ptr->is_open())
+					{
+						peer_ptr->do_write(std::move(msg));
+						rlt = true;
+					}
+				}
+			}
+			break;
+#endif //
+#if XSERVER_PROTOTYPE_HTTPS
+			case PEER_TYPE_HTTPS:
+			{
+				https_ptr peer_ptr;
+				{
+					https_weak_ptr peer_weak_ptr = boost::any_cast<https_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					if (peer_ptr->is_open())
+					{
+						peer_ptr->do_write(std::move(msg));
+						rlt = true;
+					}
+				}
+			}
+			break;
+#endif //
+			default:
+			{
+				BOOST_ASSERT(0);
+			}
+			break;
+			}
+		}
+		return rlt;
+	}
+#endif //
+
+	inline bool post_packet(const size_t peer, const char *buf, const size_t len)
 	{
 		if (!is_run())
 		{
@@ -931,6 +1027,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	void on_accept(const boost::system::error_code &ec, const std::shared_ptr<boost::asio::ip::tcp::acceptor> &acceptor, const ssize_t type, const std::shared_ptr<boost::asio::ip::tcp::socket> &socket, const size_t peer_id)
 	{
+		T* pT = static_cast<T*>(this);
 		if (ec)
 		{
 			fail(ec, "on_accept");
@@ -942,8 +1039,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 #if XSERVER_PROTOTYPE_TCP
 			case XSERVER_TCP:
 			{
-				tcp_ptr peer_ptr = std::make_shared<tcp_t>(*static_cast<T*>(this), peer_id, std::move(*socket));
-				on_io_accept(peer_ptr);
+				tcp_ptr peer_ptr = std::make_shared<tcp_t>(*pT, peer_id, std::move(*socket));
+				pT->on_io_accept(peer_ptr);
 				peer_ptr->run();
 			}
 			break;
@@ -952,19 +1049,19 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			case XSERVER_HTTP:
 			case XSERVER_HTTPS:
 			{
-				detect_ptr peer_ptr = std::make_shared<detect_t>(*static_cast<T*>(this), peer_id, std::move(*socket),
+				detect_ptr peer_ptr = std::make_shared<detect_t>(*pT, peer_id, std::move(*socket),
 																		  io_ssl_context_,
 																		  root_directory_);
-				on_io_accept(peer_ptr, type);
+				pT->on_io_accept(peer_ptr, type);
 				peer_ptr->run();
 			}
 			break;
 #elif XSERVER_PROTOTYPE_HTTP
 			case XSERVER_HTTP:
 			{
-				http_ptr peer_ptr = std::make_shared<http_t>(*static_cast<T*>(this), peer_id, std::move(*socket),
+				http_ptr peer_ptr = std::make_shared<http_t>(*pT, peer_id, std::move(*socket),
 																		  root_directory_);
-				on_io_accept(peer_ptr);
+				pT->on_io_accept(peer_ptr);
 				peer_ptr->run();
 			}
 			break;
@@ -972,8 +1069,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 #if XSERVER_PROTOTYPE_WEBSOCKET
 			case XSERVER_WEBSOCKET:
 			{
-				ws_ptr peer_ptr = std::make_shared<ws_t>(*static_cast<T*>(this), peer_id, std::move(*socket));
-				on_io_accept(peer_ptr);
+				ws_ptr peer_ptr = std::make_shared<ws_t>(*pT, peer_id, std::move(*socket));
+				pT->on_io_accept(peer_ptr);
 				peer_ptr->run();
 			}
 			break;
@@ -981,9 +1078,9 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 #if XSERVER_PROTOTYPE_SSL_WEBSOCKET
 			case XSERVER_SSL_WEBSOCKET:
 			{
-				wss_ptr peer_ptr = std::make_shared<wss_t>(*static_cast<T*>(this), peer_id, std::move(*socket),
+				wss_ptr peer_ptr = std::make_shared<wss_t>(*pT, peer_id, std::move(*socket),
 																			  io_ssl_context_);
-				on_io_accept(peer_ptr);
+				pT->on_io_accept(peer_ptr);
 				peer_ptr->run();
 			}
 			break;
