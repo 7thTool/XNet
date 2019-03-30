@@ -663,7 +663,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 #if XSERVER_PROTOTYPE_HTTPS
 	//detect_ptr检测完成之后会变成http_ptr或https_ptr
 	//http_ptr和https_ptr分别可以升级为ws_ptr和wss_ptr
-	void on_io_accept(detect_ptr peer_ptr, const int_t type)
+	void on_io_accept(detect_ptr peer_ptr, const size_t type)
 	{
 		
 	}
