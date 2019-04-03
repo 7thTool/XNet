@@ -117,12 +117,12 @@ typedef float				x_float_t;
 typedef double				x_double_t;
 typedef void*				x_voidptr_t;
 */
-#define PEER_TYPE_MASK			0xff
 #define PEER_TYPE_BITS			8
 #define PEER_ID_BITS 			(sizeof(size_t) * 8 - PEER_TYPE_BITS)
-#define PEER_ID_MASK 			((size_t)~(PEER_TYPE_MASK << PEER_ID_BITS))
-#define PEER_TYPE(id) 			((size_t)(((size_t)(id) ^ PEER_ID_MASK) >> PEER_ID_BITS))
-#define PEER_ID(id)				((size_t)((size_t)(id) & PEER_ID_MASK))
-#define MAKE_PEER_ID(type,id) 	((size_t)(((size_t)(type) << PEER_ID_BITS) | PEER_ID(id)))
+#define PEER_TYPE_MASK			((size_t)0xff << PEER_ID_BITS)
+#define PEER_ID_MASK 			(~PEER_TYPE_MASK)
+#define PEER_TYPE(id) 			(((size_t)(id) & PEER_TYPE_MASK) >> PEER_ID_BITS)
+#define PEER_ID(id)				((size_t)(id) & PEER_ID_MASK)
+#define MAKE_PEER_ID(type,id) 	(((size_t)(type) << PEER_ID_BITS) | PEER_ID(id))
 
 #endif //__H_XNET_X_TYPE_HPP__

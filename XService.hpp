@@ -981,6 +981,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 #ifdef _DEBUG
 		size_t id = peer_id_;
 		id = MAKE_PEER_ID(XSERVER_WEBSOCKET, id);
+		size_t peer_type_mask = PEER_TYPE_MASK;
+		size_t peer_id_mask = PEER_ID_MASK;
 		size_t peer_type = PEER_TYPE(id);
 		size_t peer_id = PEER_ID(id);
 #endif //
