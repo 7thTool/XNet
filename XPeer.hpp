@@ -8,16 +8,14 @@
 
 namespace XNet {
 
-template<class Server, class Derived>
+template<class Derived>
 class XPeer
 {
 protected:
-	Server& server_;
 	size_t id_;
 	boost::any context_;
 public:
-	XPeer(Server &srv, size_t id)
-		: server_(srv), id_(id)
+	XPeer(size_t id): id_(id)
 	{
 	}
 
@@ -27,12 +25,12 @@ public:
 
 	inline Derived & derived() { return static_cast<Derived &>(*this); }
 
-	inline Server &server() { return server_; }
-
 	inline size_t id() { return id_; }
 
 	inline void set_context(boost::any context) { context_ = context; }
 	inline const boost::any &context() { return context_; }
+
+	inline boost::asio::io_service& service() { return derived().sock().get_executor().context(); }
   
 	boost::asio::ip::tcp::endpoint get_remote_endpoint()
 	{
@@ -112,7 +110,7 @@ public:
 		return port_;
 	}
 
-protected:
+//protected:
 	void do_resolve(const std::string& addr, const std::string& port)
 	{
 		//resolver_.async_resolve(query_, boost::bind(&XResolver::on_resolve,
@@ -145,22 +143,23 @@ protected:
 	}
 };
 
-template<class Server, class Derived>
+template<class Derived>
 class XClientPeer 
-	: public XPeer<Server,Derived>
+	: public XPeer<Derived>
 	, public XResolver<Derived>
 {
-	typedef XPeer<Server,Derived> Base;
+	typedef XPeer<Derived> Base;
 public:
 	typedef XResolver<Derived> Resolver;
 protected:
-	boost::asio::steady_timer timer_;
-	size_t timeout_;
-	bool reconnect_;
+	boost::asio::steady_timer connect_timer_;
+	size_t connect_timeout_;
+	//bool reconnect_;
 public:
-	XClientPeer(Server &srv, size_t id, boost::asio::io_context &io_context, size_t timeout = 0)
-		: Base(srv, id), Resolver(io_context)
-		, timer_(io_context,(std::chrono::steady_clock::time_point::max)()), timeout_(timeout), reconnect_(false)
+	XClientPeer(size_t id, boost::asio::io_context &io_context, size_t timeout = 0)
+		: Base(id), Resolver(io_context)
+		, connect_timer_(io_context,(std::chrono::steady_clock::time_point::max)()), connect_timeout_(timeout)
+		//, reconnect_(false)
 	{
 	}
 
@@ -170,36 +169,14 @@ public:
 
 	inline Derived& derived() { return static_cast<Derived&>(*this); }
 
-	inline void set_reconnect_timeout(size_t millis) { timeout_ = millis; }
-	inline size_t get_reconnect_timeout() { return timeout_; }
+	inline void set_connect_timeout(size_t millis) { connect_timeout_ = millis; }
+	inline size_t get_connect_timeout() { return connect_timeout_; }
 
- protected:
- 	// Start the asynchronous operation
-	void run(const std::string &addr, const std::string &port)
-	{
-		reconnect_ = false;
-		derived().do_resolve(addr, port);
-	}
-
-	void reconnect()
-	{
-		reconnect_ = false;
-		derived().run(derived().addr(), derived().port());
-	}
-
-	void do_close() {
-		if(reconnect_) {
-			reconnect_ = false;
-			boost::system::error_code ec;
-			timer_.cancel(ec);
-		}
-	}
-
+ //protected:
 	void on_resolve(const boost::system::error_code& ec
 		, boost::asio::ip::tcp::resolver::results_type results)
 	{
 		if (ec) {
-			derived().do_reconnect();
 			return;
 		}
 
@@ -227,6 +204,7 @@ public:
 	{
 		if (!ec)
 		{
+			derived().cancel_connect_timer();
 			derived().server().on_io_connect(derived().shared_from_this());
 			derived().sock().set_option(boost::asio::ip::tcp::no_delay(true));
 			derived().do_read();
@@ -236,42 +214,47 @@ public:
 			boost::asio::ip::tcp::endpoint ep = derived().get_remote_endpoint();
 			std::string str = ep.address().to_string();
 			LOG4E("XPEER(%d) %s:%d CONNECT ERROR: %d", derived().id(), str.c_str(), ep.port(), ec.value());
-			derived().do_reconnect();
 		}
 	}
 
-	inline void do_reconnect() {
-		if(!timeout_) {
+	inline void do_connect_timer() {
+		if(!connect_timeout_) {
 			return;
 		}
-		if(reconnect_) {
-			return;
-		}
-		reconnect_ = false;
 
-		timer_.expires_after(std::chrono::milliseconds(timeout_));
-		derived().on_reconnect_timer({});
+		connect_timer_.expires_after(std::chrono::milliseconds(connect_timeout_));
+		derived().on_connect_timeout({});
+	}
+
+	inline void cancel_connect_timer() {
+		boost::system::error_code ec;
+		connect_timer_.cancel(ec);
+	}
+
+	inline void do_connect_timeout() {
+		derived().do_close();
+		derived().run(derived().addr(), derived().port());
 	}
 
 	// Called when the timer expires.
-	void on_reconnect_timer(const boost::system::error_code &ec)
+	void on_connect_timeout(const boost::system::error_code &ec)
 	{
 		if (ec && ec != boost::asio::error::operation_aborted)
-			return derived().on_fail(ec, "reconnect_timer");
+			return derived().on_fail(ec, "on_connect_timeout");
 
 		if (!derived().is_open()) 
 			return;
 
 		// Verify that the timer really expired since the deadline may have moved.
-		if (timer_.expiry() <= std::chrono::steady_clock::now())
-			return derived().run();
+		if (connect_timer_.expiry() <= std::chrono::steady_clock::now()) 
+			return derived().do_connect_timeout();
 
 		// Wait on the timer
-		timer_.async_wait(
+		connect_timer_.async_wait(
 			//boost::asio::bind_executor(
 			//	strand_,
 				std::bind(
-					&Derived::on_reconnect_timer,
+					&Derived::on_connect_timeout,
 					derived().shared_from_this(),
 					std::placeholders::_1)
 			//	)

@@ -23,16 +23,22 @@ typedef std::shared_ptr<tcp_clt_t> tcp_clt_ptr;
 typedef std::weak_ptr<tcp_clt_t> tcp_clt_weak_ptr; 
 #endif 
 #if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_HTTPS
-typedef plain_http_session<T> http_t; 
+typedef plain_http_session<T> http_t;  
 typedef std::shared_ptr<http_t> http_ptr; 
-typedef std::weak_ptr<http_t> http_weak_ptr; 
+typedef std::weak_ptr<http_t> http_weak_ptr;
+typedef plain_http_client_session<T> http_clt_t; 
+typedef std::shared_ptr<http_clt_t> http_clt_ptr; 
+typedef std::weak_ptr<http_clt_t> http_clt_weak_ptr; 
 #endif 
 #if XSERVER_PROTOTYPE_HTTPS
 typedef detect_session<T> detect_t; 
 typedef std::shared_ptr<detect_t> detect_ptr; 
 typedef ssl_http_session<T> https_t; 
 typedef std::shared_ptr<https_t> https_ptr; 
-typedef std::weak_ptr<https_t> https_weak_ptr; 
+typedef std::weak_ptr<https_t> https_weak_ptr;  
+typedef ssl_http_client_session<T> https_clt_t; 
+typedef std::shared_ptr<https_clt_t> https_clt_ptr; 
+typedef std::weak_ptr<https_clt_t> https_clt_weak_ptr; 
 #endif 
 #if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE==XSERVER_WEBSOCKET 
 typedef plain_websocket_session<T> ws_t; 
@@ -262,6 +268,34 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			}
 
 #if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS
+			else if (PEER_TYPE(peer) == PEER_TYPE_HTTP_CLIENT)
+			{
+				http_clt_ptr peer_ptr;
+				{
+					http_clt_weak_ptr peer_weak_ptr = boost::any_cast<http_clt_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					peer_ptr->close();
+				}
+			}
+#elif XSERVER_PROTOTYPE_HTTPS
+			else if (PEER_TYPE(peer) == PEER_TYPE_HTTPS_CLIENT)
+			{
+				https_clt_ptr peer_ptr;
+				{
+					https_clt_weak_ptr peer_weak_ptr = boost::any_cast<https_clt_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					peer_ptr->close();
+				}
+			}
+#endif //
+
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS
 			else if (PEER_TYPE(peer) == PEER_TYPE_HTTP)
 			{
 				http_ptr peer_ptr;
@@ -393,6 +427,44 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			size_t peer_type = PEER_TYPE(peer);
 			switch (peer_type)
 			{
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS
+			case PEER_TYPE_HTTP_CLIENT:
+			{
+				http_clt_ptr peer_ptr;
+				{
+					http_clt_weak_ptr peer_weak_ptr = boost::any_cast<http_clt_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					if (peer_ptr->is_open())
+					{
+						peer_ptr->do_write(std::move(msg));
+						rlt = true;
+					}
+				}
+			}
+			break;
+#endif //
+#if XSERVER_PROTOTYPE_HTTPS
+			case PEER_TYPE_HTTPS_CLIENT:
+			{
+				https_clt_ptr peer_ptr;
+				{
+					https_clt_weak_ptr peer_weak_ptr = boost::any_cast<https_clt_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					if (peer_ptr->is_open())
+					{
+						peer_ptr->do_write(std::move(msg));
+						rlt = true;
+					}
+				}
+			}
+			break;
+#endif //
 #if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS
 			case PEER_TYPE_HTTP:
 			{
@@ -688,6 +760,15 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 	}
+
+	void on_io_connect(http_clt_ptr peer_ptr)
+	{
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			peer_map_[peer_ptr->id()] = http_clt_weak_ptr(peer_ptr);
+			//lock.unlock();
+		}
+	}
 #endif
 
 #if XSERVER_PROTOTYPE_HTTPS
@@ -706,6 +787,15 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
 			peer_map_.erase(MAKE_PEER_ID(PEER_TYPE_HTTPS, peer_ptr->id()));
 			peer_map_[peer_ptr->id()] = wss_weak_ptr(peer_ptr);
+			//lock.unlock();
+		}
+	}
+
+	void on_io_connect(https_clt_ptr peer_ptr)
+	{
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			peer_map_[peer_ptr->id()] = https_clt_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
 	}
@@ -795,6 +885,25 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		LOG4I("http_t(%d) has been closed", peer_ptr->id());
 		//}
 	}
+
+	void on_io_close(http_clt_t *peer_ptr)
+	{
+		bool bfind = false;
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
+			if (it != peer_map_.end())
+			{
+				bfind = true;
+				peer_map_.erase(it);
+				lock.unlock();
+			}
+			//lock.unlock();
+		}
+		//if (bfind) {
+		LOG4I("http_clt_t(%d) has been closed", peer_ptr->id());
+		//}
+	}
 #endif
 #if XSERVER_PROTOTYPE_HTTPS
 	template <class Body, class Allocator>
@@ -823,6 +932,25 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		}
 		//if (bfind) {
 		LOG4I("https_t(%d) has been closed", peer_ptr->id());
+		//}
+	}
+
+	void on_io_close(https_clt_t *peer_ptr)
+	{
+		bool bfind = false;
+		{
+			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
+			if (it != peer_map_.end())
+			{
+				bfind = true;
+				peer_map_.erase(it);
+				lock.unlock();
+			}
+			//lock.unlock();
+		}
+		//if (bfind) {
+		LOG4I("https_clt_t(%d) has been closed", peer_ptr->id());
 		//}
 	}
 #endif //
