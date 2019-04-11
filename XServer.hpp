@@ -77,6 +77,18 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 						boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req
 						) {}
 		void on_http_close(http_t *peer_ptr) {}
+		
+		void on_http_clt_connect(http_clt_ptr peer_ptr) {}
+		// This function produces an HTTP response for the given
+		// request. The type of the response object depends on the
+		// contents of the request, so the interface requires the
+		// caller to pass a generic lambda for receiving the response.
+		template <class Body, class Allocator>
+		void on_http_clt_read(http_clt_ptr peer_ptr,
+						boost::beast::string_view doc_root,
+						boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req
+						) {}
+		void on_http_clt_close(http_clt_t *peer_ptr) {}
 	#endif
 	#if XSERVER_PROTOTYPE_HTTPS
 		void on_https_accept(https_ptr peer_ptr) {}
@@ -90,6 +102,18 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 						boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req
 						) {}
 		void on_https_close(https_t *peer_ptr) {}
+		
+		void on_https_clt_connect(https_clt_ptr peer_ptr) {}
+		// This function produces an HTTP response for the given
+		// request. The type of the response object depends on the
+		// contents of the request, so the interface requires the
+		// caller to pass a generic lambda for receiving the response.
+		template <class Body, class Allocator>
+		void on_https_clt_read(https_clt_ptr peer_ptr,
+						boost::beast::string_view doc_root,
+						boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req
+						) {}
+		void on_https_clt_close(https_clt_t *peer_ptr) {}
 	#endif
 	#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS || XSERVER_PROTOTYPE_WEBSOCKET
 		template <class Body, class Allocator>
@@ -186,6 +210,12 @@ public:
 		base::on_io_accept(peer_ptr);
 		listener_->on_http_accept(peer_ptr);
 	}
+
+	void on_io_connect(http_clt_ptr peer_ptr)
+	{
+		base::on_io_connect(peer_ptr);
+		listener_->on_http_clt_connect(peer_ptr);
+	}
 #endif //
 
 #if XSERVER_PROTOTYPE_HTTPS
@@ -193,6 +223,12 @@ public:
 	{
 		base::on_io_accept(peer_ptr);
 		listener_->on_https_accept(peer_ptr);
+	}
+
+	void on_io_connect(https_clt_ptr peer_ptr)
+	{
+		base::on_io_connect(peer_ptr);
+		listener_->on_https_clt_connect(peer_ptr);
 	}
 #endif //
 
@@ -244,6 +280,26 @@ public:
 		base::on_io_close(peer_ptr);
 		listener_->on_http_close(peer_ptr);
 	}
+
+	// This function produces an HTTP response for the given
+	// request. The type of the response object depends on the
+	// contents of the request, so the interface requires the
+	// caller to pass a generic lambda for receiving the response.
+	template <class Body, class Allocator>
+	void
+	on_io_read(http_clt_ptr peer_ptr,
+			   boost::beast::string_view doc_root,
+			   boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req
+			   )
+	{
+		listener_->on_http_clt_read(peer_ptr, doc_root, std::move(req));
+	}
+
+	void on_io_close(http_clt_t *peer_ptr)
+	{
+		base::on_io_close(peer_ptr);
+		listener_->on_http_clt_close(peer_ptr);
+	}
 #endif //
 #if XSERVER_PROTOTYPE_HTTPS
 	// This function produces an HTTP response for the given
@@ -264,6 +320,26 @@ public:
 	{
 		base::on_io_close(peer_ptr);
 		listener_->on_https_close(peer_ptr);
+	}
+	
+	// This function produces an HTTP response for the given
+	// request. The type of the response object depends on the
+	// contents of the request, so the interface requires the
+	// caller to pass a generic lambda for receiving the response.
+	template <class Body, class Allocator>
+	void
+	on_io_read(https_clt_ptr peer_ptr,
+			   boost::beast::string_view doc_root,
+			   boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> &&req
+			   )
+	{
+		listener_->on_https_clt_read(peer_ptr, doc_root, std::move(req));
+	}
+
+	void on_io_close(https_clt_t *peer_ptr)
+	{
+		base::on_io_close(peer_ptr);
+		listener_->on_https_clt_close(peer_ptr);
 	}
 #endif //
 
