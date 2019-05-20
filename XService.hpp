@@ -100,7 +100,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	inline bool is_run() { return !stop_flag_; }
 
-	bool start(int io_thread)
+	bool start(size_t io_thread)
 	{
 		bool expected = true;
 		if (!stop_flag_.compare_exchange_strong(expected, false))
@@ -112,7 +112,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 		boost::system::error_code ec;
 
-		io_thread_num_ = io_thread + 1;
+		io_thread_num_ = std::max<>(io_thread, size_t(1));
 		peer_id_ = std::max<>(io_thread_num_, size_t(1));
 
 		//size_t i;
@@ -159,7 +159,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		io_service_->Stop();
 
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			peer_map_.clear();
 			//lock.unlock();
 		}
@@ -200,7 +200,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	template<typename Ty>
 	std::shared_ptr<Ty> connect(const std::string& addr, const unsigned short port
-		, size_t timeout
+		, const size_t timeout
 		, const size_t io_channel = 0)
 	{
 		T* pT = static_cast<T*>(this);
@@ -258,7 +258,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 		LOG4I("XServer CLOSE PEER(%d,%d)", PEER_TYPE(peer), PEER_ID(peer));
 
-		boost::shared_lock<boost::shared_mutex> lock(peer_mutex_);
+		std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 		boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer);
 		if (it != peer_map_.end())
 		{
@@ -420,7 +420,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		}
 
 		bool rlt = false;
-		boost::shared_lock<boost::shared_mutex> lock(peer_mutex_);
+		std::shared_lock<std::shared_mutex> lock(peer_mutex_);
 		boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer);
 		if (it != peer_map_.end())
 		{
@@ -521,9 +521,21 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			return false;
 		}
 		bool rlt = false;
-		boost::shared_lock<boost::shared_mutex> lock(peer_mutex_);
+		std::shared_lock<std::shared_mutex> lock(peer_mutex_);
 		boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer);
 		if (it != peer_map_.end())
+		{
+			return post_packet(it->first, it->second, buf, len);
+		}
+		return false;
+	}
+
+	inline bool post_packet(const size_t peer, boost::any &any_peer, const char *buf, const size_t len)
+	{
+		bool rlt = false;
+		//std::shared_lock<std::shared_mutex> lock(peer_mutex_);
+		//boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer);
+		//if (it != peer_map_.end())
 		{
 			size_t peer_type = PEER_TYPE(peer);
 			switch (peer_type)
@@ -533,7 +545,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			{
 				ws_clt_ptr peer_ptr;
 				{
-					ws_clt_weak_ptr peer_weak_ptr = boost::any_cast<ws_clt_weak_ptr>(it->second);
+					ws_clt_weak_ptr peer_weak_ptr = boost::any_cast<ws_clt_weak_ptr>(any_peer);
 					peer_ptr = peer_weak_ptr.lock();
 				}
 				if (peer_ptr)
@@ -552,7 +564,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			{
 				wss_clt_ptr peer_ptr;
 				{
-					wss_clt_weak_ptr peer_weak_ptr = boost::any_cast<wss_clt_weak_ptr>(it->second);
+					wss_clt_weak_ptr peer_weak_ptr = boost::any_cast<wss_clt_weak_ptr>(any_peer);
 					peer_ptr = peer_weak_ptr.lock();
 				}
 				if (peer_ptr)
@@ -571,7 +583,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			{
 				ws_ptr peer_ptr;
 				{
-					ws_weak_ptr peer_weak_ptr = boost::any_cast<ws_weak_ptr>(it->second);
+					ws_weak_ptr peer_weak_ptr = boost::any_cast<ws_weak_ptr>(any_peer);
 					peer_ptr = peer_weak_ptr.lock();
 				}
 				if (peer_ptr)
@@ -590,7 +602,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			{
 				wss_ptr peer_ptr;
 				{
-					wss_weak_ptr peer_weak_ptr = boost::any_cast<wss_weak_ptr>(it->second);
+					wss_weak_ptr peer_weak_ptr = boost::any_cast<wss_weak_ptr>(any_peer);
 					peer_ptr = peer_weak_ptr.lock();
 				}
 				if (peer_ptr)
@@ -609,7 +621,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			{
 				tcp_clt_ptr peer_ptr;
 				{
-					tcp_clt_weak_ptr peer_weak_ptr = boost::any_cast<tcp_clt_weak_ptr>(it->second);
+					tcp_clt_weak_ptr peer_weak_ptr = boost::any_cast<tcp_clt_weak_ptr>(any_peer);
 					peer_ptr = peer_weak_ptr.lock();
 				}
 				if (peer_ptr)
@@ -626,7 +638,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			{
 				tcp_ptr peer_ptr;
 				{
-					tcp_weak_ptr peer_weak_ptr = boost::any_cast<tcp_weak_ptr>(it->second);
+					tcp_weak_ptr peer_weak_ptr = boost::any_cast<tcp_weak_ptr>(any_peer);
 					peer_ptr = peer_weak_ptr.lock();
 				}
 				if (peer_ptr)
@@ -648,7 +660,87 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		}
 		return rlt;
 	}
-	//void broadcast(const char* buf, const size_t len);
+	void broadcast_packet(const char* buf, const size_t len)
+	{
+		if (!is_run())
+		{
+			return;
+		}
+		std::shared_lock<std::shared_mutex> lock(peer_mutex_);
+		for (auto it : peer_map_)
+		{
+			size_t peer_type = PEER_TYPE(it.first);
+			switch (peer_type)
+			{
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS
+			case PEER_TYPE_HTTP_CLIENT:
+			{
+				
+			}
+			break;
+#endif //
+#if XSERVER_PROTOTYPE_HTTPS
+			case PEER_TYPE_HTTPS_CLIENT:
+			{
+				
+			}
+			break;
+#endif //
+#if XSERVER_PROTOTYPE_HTTP || XSERVER_PROTOTYPE_HTTPS
+			case PEER_TYPE_HTTP:
+			{
+				
+			}
+			break;
+#endif //
+#if XSERVER_PROTOTYPE_HTTPS
+			case PEER_TYPE_HTTPS:
+			{
+				https_ptr peer_ptr;
+				{
+					https_weak_ptr peer_weak_ptr = boost::any_cast<https_weak_ptr>(it->second);
+					peer_ptr = peer_weak_ptr.lock();
+				}
+				if (peer_ptr)
+				{
+					if (peer_ptr->is_open())
+					{
+						peer_ptr->do_write(std::move(msg));
+						rlt = true;
+					}
+				}
+			}
+			break;
+#endif //
+#if XSERVER_PROTOTYPE_WEBSOCKET
+			case PEER_TYPE_WEBSOCKET_CLIENT:
+			{
+				
+			}
+			break;
+#endif //
+#if XSERVER_PROTOTYPE_SSL_WEBSOCKET
+			case PEER_TYPE_SSL_WEBSOCKET_CLIENT:
+			{
+				
+			}
+			break;
+#endif //
+#if XSERVER_PROTOTYPE_TCP
+			case PEER_TYPE_TCP_CLIENT:
+			{
+				
+			}
+			break;
+#endif //
+			default:
+			{
+				post_packet(it.first, it.second, buf, len);
+			}
+			break;
+			}
+		}
+	}
 
 #if XSERVER_PROTOTYPE_TCP
 	//int parse_buffer(tcp_ptr peer_ptr, const char* buf, const size_t len);
@@ -657,7 +749,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	void on_io_accept(tcp_ptr peer_ptr)
 	{
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			peer_map_[peer_ptr->id()] = tcp_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
@@ -670,7 +762,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		// 	}
 		// 	else {
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			peer_map_[peer_ptr->id()] = tcp_clt_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
@@ -689,7 +781,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	{
 		bool bfind = false;
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
 			if (it != peer_map_.end())
 			{
@@ -716,7 +808,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	{
 		bool bfind = false;
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
 			if (it != peer_map_.end())
 			{
@@ -745,7 +837,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	void on_io_accept(http_ptr peer_ptr)
 	{
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			peer_map_[peer_ptr->id()] = http_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
@@ -754,7 +846,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	void on_io_upgrade(ws_ptr peer_ptr)
 	{
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			peer_map_.erase(MAKE_PEER_ID(PEER_TYPE_HTTP, peer_ptr->id()));
 			peer_map_[peer_ptr->id()] = ws_weak_ptr(peer_ptr);
 			//lock.unlock();
@@ -764,7 +856,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	void on_io_connect(http_clt_ptr peer_ptr)
 	{
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			peer_map_[peer_ptr->id()] = http_clt_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
@@ -775,7 +867,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	void on_io_accept(https_ptr peer_ptr)
 	{
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			peer_map_[peer_ptr->id()] = https_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
@@ -784,7 +876,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	void on_io_upgrade(wss_ptr peer_ptr)
 	{
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			peer_map_.erase(MAKE_PEER_ID(PEER_TYPE_HTTPS, peer_ptr->id()));
 			peer_map_[peer_ptr->id()] = wss_weak_ptr(peer_ptr);
 			//lock.unlock();
@@ -794,7 +886,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	void on_io_connect(https_clt_ptr peer_ptr)
 	{
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			peer_map_[peer_ptr->id()] = https_clt_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
@@ -805,7 +897,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	void on_io_accept(ws_ptr peer_ptr)
 	{
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			peer_map_[peer_ptr->id()] = ws_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
@@ -818,7 +910,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		// 	}
 		// 	else {
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			peer_map_[peer_ptr->id()] = ws_clt_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
@@ -830,7 +922,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	void on_io_accept(wss_ptr peer_ptr)
 	{
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			peer_map_[peer_ptr->id()] = wss_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
@@ -843,7 +935,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 		// 	}
 		// 	else {
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			peer_map_[peer_ptr->id()] = wss_clt_weak_ptr(peer_ptr);
 			//lock.unlock();
 		}
@@ -871,7 +963,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	{
 		bool bfind = false;
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
 			if (it != peer_map_.end())
 			{
@@ -890,7 +982,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	{
 		bool bfind = false;
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
 			if (it != peer_map_.end())
 			{
@@ -920,7 +1012,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	{
 		bool bfind = false;
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
 			if (it != peer_map_.end())
 			{
@@ -939,7 +1031,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	{
 		bool bfind = false;
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
 			if (it != peer_map_.end())
 			{
@@ -979,7 +1071,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	{
 		bool bfind = false;
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
 			if (it != peer_map_.end())
 			{
@@ -1010,7 +1102,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	{
 		bool bfind = false;
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
 			if (it != peer_map_.end())
 			{
@@ -1051,7 +1143,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	{
 		bool bfind = false;
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
 			if (it != peer_map_.end())
 			{
@@ -1082,7 +1174,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	{
 		bool bfind = false;
 		{
-			boost::unique_lock<boost::shared_mutex> lock(peer_mutex_);
+			std::unique_lock<std::shared_mutex> lock(peer_mutex_);
 			boost::unordered_map<size_t, boost::any>::iterator it = peer_map_.find(peer_ptr->id());
 			if (it != peer_map_.end())
 			{
@@ -1119,10 +1211,13 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	size_t new_io_channel_peer_id(size_t channel)
 	{
-		channel %= (io_thread_num_ - 1);
+		size_t io_channel_num = io_thread_num_;
+		if (io_thread_num_ > 1)
+			io_channel_num = io_thread_num_ - 1;
+		channel %= io_channel_num;
 		size_t peer_id = new_peer_id();
 		//0是用于accept服务
-		while (peer_id % (io_thread_num_ - 1) != channel)
+		while (peer_id % io_channel_num != channel)
 			;
 		return peer_id;
 	}
@@ -1135,6 +1230,8 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 	size_t get_io_index(size_t id)
 	{
 		BOOST_ASSERT(PEER_TYPE(id) == 0);
+		if(io_thread_num_ <= 1)
+			return id % io_thread_num_;
 		//0是用于accept服务
 		//size_t index = 1 + rand() % (io_service_->size()-1);
 		return 1 + id % (io_thread_num_ - 1);
@@ -1244,7 +1341,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	std::atomic<size_t> peer_id_;
 	boost::unordered_map<size_t, boost::any> peer_map_;
-	boost::shared_mutex peer_mutex_;
+	std::shared_mutex peer_mutex_;
 };
 
 }

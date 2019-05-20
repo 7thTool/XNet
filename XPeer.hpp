@@ -204,7 +204,6 @@ public:
 	{
 		if (!ec)
 		{
-			derived().cancel_connect_timer();
 			derived().server().on_io_connect(derived().shared_from_this());
 			derived().sock().set_option(boost::asio::ip::tcp::no_delay(true));
 			derived().do_read();
@@ -232,18 +231,17 @@ public:
 	}
 
 	inline void do_connect_timeout() {
-		derived().do_close();
 		derived().run(derived().addr(), derived().port());
 	}
 
 	// Called when the timer expires.
 	void on_connect_timeout(const boost::system::error_code &ec)
 	{
-		if (ec && ec != boost::asio::error::operation_aborted)
-			return derived().on_fail(ec, "on_connect_timeout");
-
-		if (!derived().is_open()) 
+		if (ec/* && ec != boost::asio::error::operation_aborted*/)
 			return;
+
+		//if (!derived().is_open()) 
+		//	return;
 
 		// Verify that the timer really expired since the deadline may have moved.
 		if (connect_timer_.expiry() <= std::chrono::steady_clock::now()) 
@@ -259,6 +257,12 @@ public:
 					std::placeholders::_1)
 			//	)
 			);
+	}
+
+	inline void on_fail(boost::system::error_code ec, char const *what)
+	{
+		Base::on_fail(ec, what);
+		derived().do_connect_timer();
 	}
 };
 

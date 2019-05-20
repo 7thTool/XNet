@@ -1607,8 +1607,6 @@ class websocket_client_session : public XClientPeer<Derived>
 		// Save these for later
 		//text_ = text;
 
-		derived().do_connect_timer();
-
 		// Set the control callback. This will be called
 		// on every incoming ping, pong, and close frame.
 		control_callback_ = std::bind(
@@ -1624,9 +1622,9 @@ class websocket_client_session : public XClientPeer<Derived>
 	inline void
 	do_handshake()
 	{
-#if 0
+#if 1
 		// Perform the websocket handshake
-		derived().ws().async_handshake(Resolver::addr(), "/",
+		derived().ws().async_handshake(derived().addr(), "/",
 			std::bind(
 				&Derived::on_handshake,
 				derived().shared_from_this(),
@@ -1764,19 +1762,17 @@ class websocket_client_session : public XClientPeer<Derived>
 
 	void do_close()
 	{
-		derived().cancel_connect_timer();
-
 		// Closing the socket cancels all outstanding operations. They
 		// will complete with boost::asio::error::operation_aborted
-		boost::system::error_code ec;
-		derived().sock().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
-		derived().sock().close(ec);
+		// boost::system::error_code ec;
+		// derived().sock().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+		// derived().sock().close(ec);
 		// Close the WebSocket connection
-		// derived().ws().async_close(boost::beast::websocket::close_code::normal,
-		// 						   std::bind(
-		// 							   &Derived::on_close,
-		// 							   derived().shared_from_this(),
-		// 							   std::placeholders::_1));
+		derived().ws().async_close(boost::beast::websocket::close_code::normal,
+								   std::bind(
+									   &Derived::on_close,
+									   derived().shared_from_this(),
+									   std::placeholders::_1));
 	}
 
 	void
@@ -1925,7 +1921,7 @@ class ssl_websocket_client_session
 			return;
 		}
 
-		do_handshake();
+		this->do_handshake();
 	}
 };
 
