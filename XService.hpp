@@ -792,7 +792,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("tcp_t(%d) has been closed", peer_ptr->id());
+		LOG4T("tcp_t(%d) has been closed", peer_ptr->id());
 		//}
 	}
 
@@ -819,7 +819,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("tcp_client_session(%d) has been closed", peer_ptr->id());
+		LOG4T("tcp_client_session(%d) has been closed", peer_ptr->id());
 		//}
 	}
 #endif //
@@ -974,7 +974,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("http_t(%d) has been closed", peer_ptr->id());
+		LOG4T("http_t(%d) has been closed", peer_ptr->id());
 		//}
 	}
 
@@ -993,7 +993,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("http_clt_t(%d) has been closed", peer_ptr->id());
+		LOG4T("http_clt_t(%d) has been closed", peer_ptr->id());
 		//}
 	}
 #endif
@@ -1023,7 +1023,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("https_t(%d) has been closed", peer_ptr->id());
+		LOG4T("https_t(%d) has been closed", peer_ptr->id());
 		//}
 	}
 
@@ -1042,7 +1042,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("https_clt_t(%d) has been closed", peer_ptr->id());
+		LOG4T("https_clt_t(%d) has been closed", peer_ptr->id());
 		//}
 	}
 #endif //
@@ -1061,10 +1061,12 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	void on_io_read(ws_ptr peer_ptr, std::string &buffer)
 	{
+		LOG4T("ws_t(%d) on_io_read", peer_ptr->id());
 	}
 
 	void on_io_write(ws_ptr peer_ptr, std::string &buffer)
 	{
+		LOG4T("ws_t(%d) on_io_read", peer_ptr->id());
 	}
 
 	void on_io_close(ws_t *peer_ptr)
@@ -1082,7 +1084,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("ws_t(%d) has been closed", peer_ptr->id());
+		LOG4T("ws_t(%d) has been closed", peer_ptr->id());
 		//}
 	}
 
@@ -1092,10 +1094,12 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 
 	void on_io_read(ws_clt_ptr peer_ptr, std::string &buffer)
 	{
+		LOG4T("ws_clt_t(%d) on_io_read", peer_ptr->id());
 	}
 
 	void on_io_write(ws_clt_ptr peer_ptr, std::string &buffer)
 	{
+		LOG4T("ws_clt_t(%d) on_io_write", peer_ptr->id());
 	}
 
 	void on_io_close(ws_clt_t *peer_ptr)
@@ -1113,7 +1117,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("ws_clt_t(%d) has been closed", peer_ptr->id());
+		LOG4T("ws_clt_t(%d) has been closed", peer_ptr->id());
 		//}
 	}
 #endif //
@@ -1154,7 +1158,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("wss_t(%d) has been closed", peer_ptr->id());
+		LOG4T("wss_t(%d) has been closed", peer_ptr->id());
 		//}
 	}
 
@@ -1185,7 +1189,7 @@ typedef std::weak_ptr<wss_clt_t> wss_clt_weak_ptr;
 			//lock.unlock();
 		}
 		//if (bfind) {
-		LOG4I("wss_clt_t(%d) has been closed", peer_ptr->id());
+		LOG4T("wss_clt_t(%d) has been closed", peer_ptr->id());
 		//}
 	}
 #endif //
